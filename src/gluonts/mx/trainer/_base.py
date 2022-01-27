@@ -123,8 +123,13 @@ class Trainer:
         ...         objective="min",
         ...     )
         ... ]
+    # PBR
+    jitter_coeff
+        Coefficient for white noise addition to the future_target feature
+        (default: 0.0)
     """
 
+    # PBR
     @validated()
     def __init__(
         self,
@@ -142,6 +147,7 @@ class Trainer:
         hybridize: bool = True,
         callbacks: Optional[List[Callback]] = None,
         add_default_callbacks: bool = True,
+        jitter_coeff: float = 0.0,
     ) -> None:
 
         if batch_size is not None:
@@ -229,6 +235,10 @@ class Trainer:
             self.callbacks = CallbackList(callbacks + default_callbacks)
         else:
             self.callbacks = CallbackList(callbacks)
+        
+        # PBR
+        self.jitter_coeff = jitter_coeff
+        
 
     def count_model_params(self, net: nn.HybridBlock) -> int:
         params = net.collect_params()
@@ -336,6 +346,14 @@ class Trainer:
                     if self.halt:
                         break
 
+                    # PBR
+                    if is_training:
+                        # jitter batch future target values here, if is_training is True
+                        noise = batch['future_target'] * mx.nd.normal(shape=batch['future_target'].shape, 
+                                                                   ctx=mx.context.current_context()) * self.jitter_coeff
+                        batch['future_target'] = mx.nd.clip(batch['future_target'] + noise, 0, MAX_VALUE)
+                        
+                        
                     if first_forward:
                         first_forward = False
                         _ = net(*batch.values())
