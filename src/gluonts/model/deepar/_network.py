@@ -559,6 +559,9 @@ class DeepARNetwork(mx.gluon.HybridBlock):
             ),
         )
 
+        # PBR
+        # inspect here what happens
+        
         # (batch_size, num_features)
         embedded_cat = self.embedder(feat_static_cat)
 

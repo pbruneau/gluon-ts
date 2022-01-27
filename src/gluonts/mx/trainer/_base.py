@@ -11,6 +11,9 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+# PBR
+import pdb
+
 import itertools
 import logging
 import os
@@ -42,6 +45,9 @@ logger = logging.getLogger("gluonts").getChild("trainer")
 
 MODEL_ARTIFACT_FILE_NAME = "model"
 STATE_ARTIFACT_FILE_NAME = "state"
+
+# PBR
+MAX_VALUE = np.finfo(np.float32).max
 
 # make the IDE happy: mx.py does not explicitly import autograd
 mx.autograd = autograd
@@ -318,7 +324,7 @@ class Trainer:
                     self.callbacks.on_validation_epoch_start(
                         training_network=net
                     )
-
+                
                 batch_iter = itertools.islice(batch_iter, num_batches_to_use)
 
                 it = tqdm(batch_iter, total=num_batches_to_use)
@@ -326,6 +332,14 @@ class Trainer:
                     # `batch` here is expected to be a dictionary whose fields
                     # should correspond 1-to-1 with the network inputs
                     # see below how `batch.values()` is fed into the network
+                    
+                    # PBR
+                    if is_training:
+                        # jitter batch future target values here, if is_training is True
+                        noise = batch['future_target'] * mx.nd.normal(shape=batch['future_target'].shape, 
+                                                                   ctx=mx.context.current_context()) * 0.05
+                        batch['future_target'] = mx.nd.clip(batch['future_target'] + noise, 0, MAX_VALUE)
+                    
                     if self.halt:
                         break
 

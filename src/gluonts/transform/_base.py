@@ -11,6 +11,10 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+# PBR
+import pdb
+from pprint import pprint
+
 import abc
 from typing import Callable, Iterable, Iterator, List
 
@@ -65,6 +69,7 @@ class Chain(Transformation):
         tmp = data_it
         for t in self.transformations:
             tmp = t(tmp, is_train)
+                
         return tmp
 
 
@@ -100,6 +105,7 @@ class TransformedDataset(Dataset):
         return sum(1 for _ in self)
 
     def __iter__(self) -> Iterator[DataEntry]:
+                
         yield from self.transformation(
             self.base_dataset, is_train=self.is_train
         )
