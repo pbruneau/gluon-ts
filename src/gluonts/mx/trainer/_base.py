@@ -332,14 +332,7 @@ class Trainer:
                     # `batch` here is expected to be a dictionary whose fields
                     # should correspond 1-to-1 with the network inputs
                     # see below how `batch.values()` is fed into the network
-                    
-                    # PBR
-                    if is_training:
-                        # jitter batch future target values here, if is_training is True
-                        noise = batch['future_target'] * mx.nd.normal(shape=batch['future_target'].shape, 
-                                                                   ctx=mx.context.current_context()) * 0.05
-                        batch['future_target'] = mx.nd.clip(batch['future_target'] + noise, 0, MAX_VALUE)
-                    
+                                        
                     if self.halt:
                         break
 
