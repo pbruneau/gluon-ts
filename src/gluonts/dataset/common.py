@@ -45,6 +45,8 @@ from gluonts.dataset import jsonl, util
 DataEntry = Dict[str, Any]
 DataBatch = Dict[str, Any]
 
+# PBR
+MAX_VALUE = np.finfo(np.float32).max
 
 class Dataset(Protocol):
     def __iter__(self) -> Iterator[DataEntry]:
@@ -283,6 +285,8 @@ class AugmentedListDataset(Dataset):
         Must be a valid Pandas frequency.
     one_dim_target
         Whether to accept only univariate target time series.
+    coeff
+        Coefficient for scaled white noise addition.
     """
 
     def __init__(
@@ -290,7 +294,7 @@ class AugmentedListDataset(Dataset):
         data_iter: Iterable[DataEntry],
         freq: str,
         one_dim_target: bool = True,
-        coeff: float = 0.1,
+        coeff: float = 0.02,
     ) -> None:
         self.process = ProcessDataEntry(freq, one_dim_target)
         self.list_data = list(data_iter)  # dataset always cached
@@ -306,26 +310,11 @@ class AugmentedListDataset(Dataset):
                 continue
             
             context_size = 48
-            orig_scale = np.mean(np.abs(data['target'][:context_size]))
-            tmp = {}
-            
-            add_samp = np.random.choice(len(self.list_data), 2)
-            tmp['target'] = data['target'].values / orig_scale
-            #tmp['feat_dynamic_real'] = [data['feat_dynamic_real'][i].values 
-            #                            for i in range(len(data['feat_dynamic_real']))]
-            
-            for ind in add_samp:
-                samp_scale = np.mean(np.abs(self.list_data[ind]['target'][:context_size]))
-                tmp['target'] += self.coeff * (self.list_data[ind]['target'].values / samp_scale)
-            #    for i in range(len(tmp['feat_dynamic_real'])):
-            #        tmp['feat_dynamic_real'][i] += self.coeff * (self.list_data[ind]['feat_dynamic_real'][i].values)
-            
-            tmp['target'] = tmp['target'] * orig_scale / (1+2*self.coeff)
-            data['target'][:] = tmp['target']
-            
-            #for i in range(len(tmp['feat_dynamic_real'])):
-            #    tmp['feat_dynamic_real'][i] = tmp['target'] / (1+2*self.coeff)
-            #    data['feat_dynamic_real'][i][:] = tmp['feat_dynamic_real'][i]
+
+            # jittering only the context, leaving target unchanged
+            noise = data['target'].values[:context_size] * \
+                np.random.normal(size=data['target'].values[:context_size].shape) * self.coeff
+            data['target'][:context_size] = np.clip(data['target'].values[:context_size] + noise, 0., MAX_VALUE)
             
             data = data.copy()
             data = self.process(data)
