@@ -11,6 +11,9 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+# PBR
+import pdb
+
 import shutil
 from enum import Enum
 from functools import lru_cache
@@ -254,7 +257,7 @@ class ListDataset(Dataset):
         for row_number, data in enumerate(self.list_data):
             if not bounds.lower <= row_number < bounds.upper:
                 continue
-
+                
             data = data.copy()
             data = self.process(data)
             data["source"] = SourceContext(source=source_name, row=row_number)
@@ -263,6 +266,76 @@ class ListDataset(Dataset):
     def __len__(self):
         return len(self.list_data)
 
+# PBR
+class AugmentedListDataset(Dataset):
+    """
+    ListDataset augmented by random linear combinations
+    of input samples
+
+    Parameters
+    ----------
+    data_iter
+        Iterable object yielding all items in the dataset.
+        Each item should be a dictionary mapping strings to values.
+        For instance: {"start": "2014-09-07", "target": [0.1, 0.2]}.
+    freq
+        Frequency of the observation in the time series.
+        Must be a valid Pandas frequency.
+    one_dim_target
+        Whether to accept only univariate target time series.
+    """
+
+    def __init__(
+        self,
+        data_iter: Iterable[DataEntry],
+        freq: str,
+        one_dim_target: bool = True,
+        coeff: float = 0.1,
+    ) -> None:
+        self.process = ProcessDataEntry(freq, one_dim_target)
+        self.list_data = list(data_iter)  # dataset always cached
+        self.coeff = coeff
+
+    def __iter__(self) -> Iterator[DataEntry]:
+        source_name = "list_data"
+        # Basic idea is to split the dataset into roughly equally sized segments
+        # with lower and upper bound, where each worker is assigned one segment
+        bounds = util.get_bounds_for_mp_data_loading(len(self))
+        for row_number, data in enumerate(self.list_data):
+            if not bounds.lower <= row_number < bounds.upper:
+                continue
+            
+            context_size = 48
+            orig_scale = np.mean(np.abs(data['target'][:context_size]))
+            tmp = {}
+            
+            add_samp = np.random.choice(len(self.list_data), 2)
+            tmp['target'] = data['target'].values / orig_scale
+            #tmp['feat_dynamic_real'] = [data['feat_dynamic_real'][i].values 
+            #                            for i in range(len(data['feat_dynamic_real']))]
+            
+            for ind in add_samp:
+                samp_scale = np.mean(np.abs(self.list_data[ind]['target'][:context_size]))
+                tmp['target'] += self.coeff * (self.list_data[ind]['target'].values / samp_scale)
+            #    for i in range(len(tmp['feat_dynamic_real'])):
+            #        tmp['feat_dynamic_real'][i] += self.coeff * (self.list_data[ind]['feat_dynamic_real'][i].values)
+            
+            tmp['target'] = tmp['target'] * orig_scale / (1+2*self.coeff)
+            data['target'][:] = tmp['target']
+            
+            #for i in range(len(tmp['feat_dynamic_real'])):
+            #    tmp['feat_dynamic_real'][i] = tmp['target'] / (1+2*self.coeff)
+            #    data['feat_dynamic_real'][i][:] = tmp['feat_dynamic_real'][i]
+            
+            data = data.copy()
+            data = self.process(data)
+            data["source"] = SourceContext(source=source_name, row=row_number)
+            yield data
+
+    def __len__(self):
+        return len(self.list_data)
+    
+    
 
 class TimeZoneStrategy(Enum):
     ignore = "ignore"

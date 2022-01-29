@@ -13,6 +13,9 @@
 
 from typing import List, Optional, Tuple, Union
 
+# PBR
+import pdb
+
 import mxnet as mx
 import numpy as np
 from mxnet.gluon.contrib.rnn import VariationalDropoutCell
@@ -703,7 +706,7 @@ class DeepARNetwork(mx.gluon.HybridBlock):
             indices=self.lags_seq,
             subsequences_length=subsequences_length,
         )
-
+        
         # scale is computed on the context length last units of the past target
         # scale shape is (batch_size, 1, *target_shape)
         _, scale = self.scaler(
@@ -714,7 +717,7 @@ class DeepARNetwork(mx.gluon.HybridBlock):
                 axis=1, begin=-self.context_length, end=None
             ),
         )
-
+        
         # (batch_size, num_features)
         embedded_cat = self.embedder(feat_static_cat)
 
