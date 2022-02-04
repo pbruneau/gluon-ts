@@ -14,6 +14,7 @@
 # PBR
 import pdb
 import random
+from copy import deepcopy
 
 import shutil
 from enum import Enum
@@ -319,12 +320,13 @@ class AugmentedListDataset(Dataset):
             data = self.list_data[ind]
             context_size = 48
 
+            data = deepcopy(data)
+            
             # jittering only the context, leaving target unchanged
             noise = data['target'].values[:context_size] * \
                 np.random.normal(size=data['target'].values[:context_size].shape) * self.coeff
             data['target'][:context_size] = np.clip(data['target'].values[:context_size] + noise, 0., MAX_VALUE)
             
-            data = data.copy()
             data = self.process(data)
             data["source"] = SourceContext(source=source_name, row=row_number)
             yield data
