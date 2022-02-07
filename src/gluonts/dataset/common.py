@@ -307,17 +307,11 @@ class AugmentedListDataset(Dataset):
         # Basic idea is to split the dataset into roughly equally sized segments
         # with lower and upper bound, where each worker is assigned one segment
         
-        # PBR
-        # reshuffle at each loop
-        inds = list(range(len(self.list_data)))
-        random.shuffle(inds)
-        
         bounds = util.get_bounds_for_mp_data_loading(len(self))
-        for row_number, ind in enumerate(inds):
+        for row_number, data in enumerate(self.list_data):
             if not bounds.lower <= row_number < bounds.upper:
                 continue
             
-            data = self.list_data[ind]
             context_size = 48
 
             data = deepcopy(data)
