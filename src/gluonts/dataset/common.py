@@ -11,6 +11,9 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+# PBR
+from copy import deepcopy
+
 import shutil
 from enum import Enum
 from functools import lru_cache
@@ -43,6 +46,8 @@ from gluonts.exceptions import GluonTSDataError
 DataEntry = Dict[str, Any]
 DataBatch = Dict[str, Any]
 
+# PBR
+MAX_VALUE = np.finfo(np.float32).max
 
 @runtime_checkable
 class Dataset(Protocol):
@@ -254,6 +259,65 @@ class ListDataset(Dataset):
                 continue
 
             data = data.copy()
+            data = self.process(data)
+            data["source"] = SourceContext(source=source_name, row=row_number)
+            yield data
+
+    def __len__(self):
+        return len(self.list_data)
+
+
+# PBR
+class AugmentedListDataset(Dataset):
+    """
+    ListDataset augmented by random linear combinations
+    of input samples
+
+    Parameters
+    ----------
+    data_iter
+        Iterable object yielding all items in the dataset.
+        Each item should be a dictionary mapping strings to values.
+        For instance: {"start": "2014-09-07", "target": [0.1, 0.2]}.
+    freq
+        Frequency of the observation in the time series.
+        Must be a valid Pandas frequency.
+    one_dim_target
+        Whether to accept only univariate target time series.
+    coeff
+        Coefficient for scaled white noise addition.
+    """
+
+    def __init__(
+        self,
+        data_iter: Iterable[DataEntry],
+        freq: str,
+        one_dim_target: bool = True,
+        coeff: float = 0.02,
+    ) -> None:
+        self.process = ProcessDataEntry(freq, one_dim_target)
+        self.list_data = list(data_iter)  # dataset always cached
+        self.coeff = coeff
+
+    def __iter__(self) -> Iterator[DataEntry]:
+        source_name = "list_data"
+        # Basic idea is to split the dataset into roughly equally sized segments
+        # with lower and upper bound, where each worker is assigned one segment
+
+        bounds = util.get_bounds_for_mp_data_loading(len(self))
+        for row_number, data in enumerate(self.list_data):
+            if not bounds.lower <= row_number < bounds.upper:
+                continue
+
+            context_size = 48
+
+            data = deepcopy(data)
+
+            # jittering only the context, leaving target unchanged
+            noise = data['target'].values[:context_size] * \
+                np.random.normal(size=data['target'].values[:context_size].shape) * self.coeff
+            data['target'][:context_size] = np.clip(data['target'].values[:context_size] + noise, 0., MAX_VALUE)
+
             data = self.process(data)
             data["source"] = SourceContext(source=source_name, row=row_number)
             yield data
