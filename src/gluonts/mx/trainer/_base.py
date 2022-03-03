@@ -11,6 +11,7 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+import pdb
 import itertools
 import logging
 import os
@@ -354,6 +355,8 @@ class Trainer:
                         )
                         with mode():
                             output = net(*batch.values())
+                            
+                        pdb.set_trace()
 
                         # network can returns several outputs, the first being
                         # always the loss when having multiple outputs, the
@@ -377,7 +380,6 @@ class Trainer:
                         if is_training:
                             loss.backward()
                             trainer.step(batch_size)
-
                             self.callbacks.on_train_batch_end(
                                 training_network=net
                             )
