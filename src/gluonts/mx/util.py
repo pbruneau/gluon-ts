@@ -85,12 +85,13 @@ def assert_shape(x: Tensor, expected_shape: Tuple[int, ...]):
                     i == j
                 ), f"shape mismatch got {x.shape} expected {expected_shape}"
 
-
+# CURPBR
 def copy_parameters(
     net_source: mx.gluon.Block,
     net_dest: mx.gluon.Block,
     ignore_extra: bool = False,
     allow_missing: bool = False,
+    dir: str = '/tmp',
 ) -> None:
     """
     Copies parameters from one network to another.
@@ -109,9 +110,13 @@ def copy_parameters(
         present in the source.
     """
     with tempfile.TemporaryDirectory(
+        #CURPBR
+        dir = dir,
         prefix="gluonts-estimator-temp-"
     ) as model_dir:
         model_dir_path = str(Path(model_dir) / "tmp_model")
+        # CURPBR
+        print(model_dir_path, flush=True)
         net_source.save_parameters(model_dir_path)
         net_dest.load_parameters(
             model_dir_path,

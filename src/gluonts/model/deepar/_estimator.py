@@ -453,8 +453,10 @@ class DeepAREstimator(GluonEstimator):
             impute_missing_values=self.impute_missing_values,
         )
 
+    # CURPBR
+    # added optional dir parameter
     def create_predictor(
-        self, transformation: Transformation, trained_network: HybridBlock
+        self, transformation: Transformation, trained_network: HybridBlock, dir: str = '/tmp'
     ) -> Predictor:
         prediction_splitter = self._create_instance_splitter("test")
 
@@ -480,7 +482,7 @@ class DeepAREstimator(GluonEstimator):
             impute_missing_values=self.impute_missing_values,
         )
 
-        copy_parameters(trained_network, prediction_network)
+        copy_parameters(trained_network, prediction_network, dir=dir)
 
         return RepresentableBlockPredictor(
             input_transform=transformation + prediction_splitter,
