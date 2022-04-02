@@ -125,6 +125,7 @@ class Trainer:
         ... ]
     """
 
+    # PBR added dir parameter
     @validated()
     def __init__(
         self,
@@ -142,6 +143,7 @@ class Trainer:
         hybridize: bool = True,
         callbacks: Optional[List[Callback]] = None,
         add_default_callbacks: bool = True,
+        dir: str = '/tmp',
     ) -> None:
 
         if batch_size is not None:
@@ -208,6 +210,7 @@ class Trainer:
         self.hybridize = hybridize
         self.ctx = ctx if ctx is not None else get_mxnet_context()
         self.halt = False
+        self.dir = dir
 
         # Make sure callbacks is list -- they are assigned to `self.callbacks`
         # below
@@ -267,7 +270,9 @@ class Trainer:
         logger.info("Start model training")
         net.initialize(ctx=self.ctx, init=self.init)
 
+        # PBR
         with tempfile.TemporaryDirectory(
+            dir=self.dir,
             prefix="gluonts-trainer-temp-"
         ) as gluonts_temp, HybridContext(
             net=net,
@@ -477,6 +482,8 @@ class Trainer:
                     "score": loss_value(epoch_loss),
                 }
 
+                # PBR
+                print(epoch_info["params_path"], flush=True)
                 net.save_parameters(
                     epoch_info["params_path"]
                 )  # TODO: handle possible exception
