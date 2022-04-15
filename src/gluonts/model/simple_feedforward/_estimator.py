@@ -32,6 +32,8 @@ from gluonts.mx.model.estimator import GluonEstimator
 from gluonts.mx.model.predictor import RepresentableBlockPredictor
 from gluonts.mx.trainer import Trainer
 from gluonts.mx.util import get_hybrid_forward_input_names
+# CURPBR
+from gluonts.mx.util import copy_parameters
 from gluonts.support.util import maybe_len
 from gluonts.transform import (
     AddObservedValuesIndicator,
@@ -272,7 +274,8 @@ class SimpleFeedForwardEstimator(GluonEstimator):
 
     # we now define how the prediction happens given that we are provided a
     # training network.
-    def create_predictor(self, transformation, trained_network):
+    # CURPBR
+    def create_predictor(self, transformation, trained_network, dir='/tmp'):
         prediction_splitter = self._create_instance_splitter("test")
 
         if self.sampling is True:
@@ -283,9 +286,11 @@ class SimpleFeedForwardEstimator(GluonEstimator):
                 distr_output=self.distr_output,
                 batch_normalization=self.batch_normalization,
                 mean_scaling=self.mean_scaling,
-                params=trained_network.collect_params(),
+                #params=trained_network.collect_params(),
                 num_parallel_samples=self.num_parallel_samples,
             )
+            
+            copy_parameters(trained_network, prediction_network, dir=dir)
 
             return RepresentableBlockPredictor(
                 input_transform=transformation + prediction_splitter,
@@ -304,9 +309,12 @@ class SimpleFeedForwardEstimator(GluonEstimator):
                 distr_output=self.distr_output,
                 batch_normalization=self.batch_normalization,
                 mean_scaling=self.mean_scaling,
-                params=trained_network.collect_params(),
+                #params=trained_network.collect_params(),
                 num_parallel_samples=self.num_parallel_samples,
             )
+            
+            copy_parameters(trained_network, prediction_network, dir=dir)
+            
             return RepresentableBlockPredictor(
                 input_transform=transformation + prediction_splitter,
                 prediction_net=prediction_network,
