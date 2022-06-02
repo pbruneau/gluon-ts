@@ -301,6 +301,7 @@ class AugmentedListDataset(Dataset):
         self.process = ProcessDataEntry(freq, one_dim_target)
         self.list_data = list(data_iter)  # dataset always cached
         self.coeff = coeff
+        self.dynamic_real_select = None
 
     def __iter__(self) -> Iterator[DataEntry]:
         source_name = "list_data"
@@ -320,6 +321,12 @@ class AugmentedListDataset(Dataset):
             noise = data['target'].values[:context_size] * \
                 np.random.normal(size=data['target'].values[:context_size].shape) * self.coeff
             data['target'][:context_size] = np.clip(data['target'].values[:context_size] + noise, 0., MAX_VALUE)
+            
+            if self.dynamic_real_select is not None:
+                for el in data['feat_dynamic_real']:
+                    if el.name not in self.dynamic_real_select:
+                        data['feat_dynamic_real'].remove(el)
+            
             
             data = self.process(data)
             data["source"] = SourceContext(source=source_name, row=row_number)
