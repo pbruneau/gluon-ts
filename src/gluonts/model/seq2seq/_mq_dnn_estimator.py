@@ -29,7 +29,7 @@ from gluonts.mx.block.encoder import (
 from gluonts.mx.block.quantile_output import QuantileOutput
 from gluonts.mx.distribution import DistributionOutput
 from gluonts.mx.trainer import Trainer
-
+from gluonts.transform import InstanceSampler
 
 class MQCNNEstimator(ForkingSeq2SeqEstimator):
     """
@@ -101,6 +101,8 @@ class MQCNNEstimator(ForkingSeq2SeqEstimator):
         can be set. (Default: None)
     trainer
         The GluonTS trainer to use for training. (default: Trainer())
+    train_sampler
+        Controls the sampling of windows during training.
     scaling
         Whether to automatically scale the target values. (default: False if quantile_output is used, True otherwise)
     scaling_decoder_dynamic_feature
@@ -137,6 +139,7 @@ class MQCNNEstimator(ForkingSeq2SeqEstimator):
         quantiles: Optional[List[float]] = None,
         distr_output: Optional[DistributionOutput] = None,
         trainer: Trainer = Trainer(),
+        train_sampler: Optional[InstanceSampler] = None,
         scaling: Optional[bool] = None,
         scaling_decoder_dynamic_feature: bool = False,
         num_forking: Optional[int] = None,
@@ -237,6 +240,7 @@ class MQCNNEstimator(ForkingSeq2SeqEstimator):
             add_time_feature=add_time_feature,
             add_age_feature=add_age_feature,
             trainer=trainer,
+            train_sampler=train_sampler,
             scaling=scaling,
             scaling_decoder_dynamic_feature=scaling_decoder_dynamic_feature,
             num_forking=num_forking,

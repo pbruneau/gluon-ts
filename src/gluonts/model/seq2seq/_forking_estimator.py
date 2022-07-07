@@ -497,6 +497,7 @@ class ForkingSeq2SeqEstimator(GluonEstimator):
         self,
         transformation: Transformation,
         trained_network: ForkingSeq2SeqNetworkBase,
+        dir: str = '/tmp'
     ) -> Predictor:
         quantile_strs = (
             [
@@ -530,7 +531,7 @@ class ForkingSeq2SeqEstimator(GluonEstimator):
             dtype=self.dtype,
         )
 
-        copy_parameters(trained_network, prediction_network)
+        copy_parameters(trained_network, prediction_network, dir=dir)
 
         return RepresentableBlockPredictor(
             input_transform=transformation + prediction_splitter,
