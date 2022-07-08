@@ -133,6 +133,7 @@ class GaussianOutput(DistributionOutput):
 
     @classmethod
     def domain_map(cls, F, mu, sigma):
+        epsilon = np.finfo(cls._dtype).eps  # machine epsilon
         r"""
         Maps raw tensors to valid arguments for constructing a Gaussian
         distribution.
@@ -152,9 +153,13 @@ class GaussianOutput(DistributionOutput):
             same entries as `mu` and the second has entries mapped to the
             positive orthant.
         """
-        sigma = softplus(F, sigma)
+        # patched following https://github.com/awslabs/gluon-ts/pull/1893
+        sigma = softplus(F, sigma) + epsilon
         return mu.squeeze(axis=-1), sigma.squeeze(axis=-1)
 
     @property
     def event_shape(self) -> Tuple:
         return ()
+
+    
+    
