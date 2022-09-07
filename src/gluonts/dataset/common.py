@@ -297,11 +297,13 @@ class AugmentedListDataset(Dataset):
         freq: str,
         one_dim_target: bool = True,
         coeff: float = 0.02,
+        context_size: int = 48,
     ) -> None:
         self.process = ProcessDataEntry(freq, one_dim_target)
         self.list_data = list(data_iter)  # dataset always cached
         self.coeff = coeff
         self.dynamic_real_select = None
+        self.context_size = context_size
 
     def __iter__(self) -> Iterator[DataEntry]:
         source_name = "list_data"
@@ -313,20 +315,16 @@ class AugmentedListDataset(Dataset):
             if not bounds.lower <= row_number < bounds.upper:
                 continue
             
-            context_size = 48
-
             data = deepcopy(data)
             
             # jittering only the context, leaving target unchanged
-            noise = data['target'].values[:context_size] * \
-                np.random.normal(size=data['target'].values[:context_size].shape) * self.coeff
-            data['target'][:context_size] = np.clip(data['target'].values[:context_size] + noise, 0., MAX_VALUE)
+            noise = data['target'].values[:self.context_size] * \
+                np.random.normal(size=data['target'].values[:self.context_size].shape) * self.coeff
+            data['target'][:self.context_size] = np.clip(data['target'].values[:self.context_size] + noise, 0., MAX_VALUE)
             
             if self.dynamic_real_select is not None:
-                for el in data['feat_dynamic_real']:
-                    if el.name not in self.dynamic_real_select:
-                        data['feat_dynamic_real'].remove(el)
-            
+                data['feat_dynamic_real'] = [el for el in data['feat_dynamic_real'] 
+                                             if el.name in self.dynamic_real_select]
             
             data = self.process(data)
             data["source"] = SourceContext(source=source_name, row=row_number)
