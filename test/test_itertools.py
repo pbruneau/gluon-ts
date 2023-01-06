@@ -17,6 +17,8 @@ import tempfile
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
+import numpy as np
+from numpy.testing import assert_equal
 import pytest
 
 from gluonts.dataset.artificial import constant_dataset
@@ -26,6 +28,9 @@ from gluonts.itertools import (
     Cyclic,
     IterableSlice,
     PseudoShuffled,
+    rows_to_columns,
+    columns_to_rows,
+    select,
 )
 
 
@@ -99,3 +104,29 @@ def test_pickle(iterable: Iterable, assert_content: bool):
 
     if assert_content:
         assert data == data_copy
+
+
+@pytest.mark.parametrize(
+    "given, expected",
+    [
+        ([], {}),
+        ([{"a": 1, "b": 2}, {"a": 3, "b": 4}], {"a": [1, 3], "b": [2, 4]}),
+    ],
+)
+@pytest.mark.parametrize("wrapper", [list, np.array])
+def test_rows_to_columns(given, expected, wrapper):
+    output = rows_to_columns(given, wrapper)
+    assert_equal(output, expected)
+    assert columns_to_rows(output) == given
+
+
+def test_select():
+    d = {"a": 1, "b": 2, "c": 3}
+
+    assert select("abc", d) == d
+    assert select("ab", d) == {"a": 1, "b": 2}
+
+    assert select("abd", d, ignore_missing=True) == {"a": 1, "b": 2}
+
+    with pytest.raises(KeyError):
+        select("abd", d, ignore_missing=False) == {"a": 1, "b": 2}

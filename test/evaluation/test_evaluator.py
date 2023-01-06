@@ -15,7 +15,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from gluonts.evaluation import Evaluator, MultivariateEvaluator
+from gluonts.evaluation import (
+    Evaluator,
+    MultivariateEvaluator,
+    aggregate_valid,
+)
 from gluonts.model.forecast import QuantileForecast, SampleForecast
 
 QUANTILES = [str(q / 10.0) for q in range(1, 10)]
@@ -30,14 +34,15 @@ def data_iterator(ts):
         yield ts[i]
 
 
-def fcst_iterator(fcst, start_dates, freq):
+def fcst_iterator(fcst, start_dates):
     """
     :param fcst: list of numpy arrays with the sample paths
     :return:
     """
     for i in range(len(fcst)):
         yield SampleForecast(
-            samples=fcst[i], start_date=start_dates[i], freq=freq
+            samples=fcst[i],
+            start_date=start_dates[i],
         )
 
 
@@ -107,8 +112,12 @@ def calculate_metrics(
     samples = []  # list of forecast samples
     start_dates = []  # start date of the prediction range
     for i in range(num_timeseries):
-        ts_start_dates.append(pd.Timestamp(year=2018, month=1, day=1, hour=1))
-        index = pd.date_range(
+        ts_start_dates.append(
+            pd.Period(
+                pd.Timestamp(year=2018, month=1, day=1, hour=1), freq=freq
+            )
+        )
+        index = pd.period_range(
             ts_start_dates[i], periods=num_timestamps, freq=freq
         )
 
@@ -117,14 +126,14 @@ def calculate_metrics(
             forecaster(pd_timeseries[i], prediction_length, num_samples)
         )
         start_dates.append(
-            pd.date_range(
+            pd.period_range(
                 ts_start_dates[i], periods=num_timestamps, freq=freq
             )[-prediction_length]
         )
 
     # data iterator
     data_iter = input_type(data_iterator(pd_timeseries))
-    fcst_iter = input_type(fcst_iterator(samples, start_dates, freq))
+    fcst_iter = input_type(fcst_iterator(samples, start_dates))
 
     # evaluate
     agg_df, item_df = evaluator(data_iter, fcst_iter)
@@ -649,15 +658,14 @@ def test_metrics_multivariate(
 def test_evaluation_with_QuantileForecast():
     start = "2012-01-11"
     target = [2.4, 1.0, 3.0, 4.4, 5.5, 4.9] * 11
-    index = pd.date_range(start=start, freq="1D", periods=len(target))
+    index = pd.period_range(start=start, freq="1D", periods=len(target))
     ts = pd.Series(index=index, data=target)
 
     ev = Evaluator(quantiles=("0.1", "0.2", "0.5"))
 
     fcst = [
         QuantileForecast(
-            start_date=pd.Timestamp("2012-01-11"),
-            freq="D",
+            start_date=pd.Period("2012-01-11", freq="D"),
             forecast_arrays=np.array([[2.4, 9.0, 3.0, 2.4, 5.5, 4.9] * 10]),
             forecast_keys=["0.5"],
         )
@@ -1093,3 +1101,28 @@ def test_metrics_multivariate_custom_eval_fn(
                 "Scores for the metric {} do not match: \nexpected: {} "
                 "\nobtained: {}".format(metric, res[metric], score)
             )
+
+
+def test_aggregate_valid():
+    num_series = 3
+    series = [
+        pd.Series(
+            np.random.normal(24 + 6),
+            index=pd.date_range(
+                start="2022-12-31 00", periods=24 + 6, freq="H"
+            ),
+        ).to_period()
+        for _ in range(num_series)
+    ]
+    forecasts = [
+        SampleForecast(
+            samples=np.random.normal(size=(10, 6)),
+            start_date=pd.Period("2023-01-01 00", freq="H"),
+            item_id=str(item_id),
+        )
+        for item_id in range(num_series)
+    ]
+    evaluator = Evaluator(
+        aggregation_strategy=aggregate_valid, num_workers=None
+    )
+    agg_metrics, item_metrics = evaluator(series, forecasts)

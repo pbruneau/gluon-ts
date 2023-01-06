@@ -26,7 +26,7 @@ from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 
 from gluonts.dataset.loader import TrainDataLoader
-from gluonts.model.deepar import DeepAREstimator
+from gluonts.mx import DeepAREstimator
 from gluonts.mx.util import get_hybrid_forward_input_names
 from gluonts.mx.trainer import Trainer
 from gluonts.mx.batchify import batchify
@@ -97,9 +97,10 @@ if __name__ == "__main__":
         i = k // nll.shape[1]
         t = k % nll.shape[1]
 
-        time_index = pd.date_range(
-            pd.Timestamp(data_entry["forecast_start"][i]),
+        time_index = pd.period_range(
+            data_entry["forecast_start"][i],
             periods=context_length + prediction_length,
+            freq=data_entry["forecast_start"][i].freq,
         )
         time_index -= context_length * time_index.freq
 

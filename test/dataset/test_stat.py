@@ -17,13 +17,13 @@ from typing import cast
 import numpy as np
 import pandas as pd
 
-from gluonts.core.exception import GluonTSDataError
 from gluonts.dataset.common import DataEntry, Dataset
 from gluonts.dataset.stat import (
     DatasetStatistics,
     ScaleHistogram,
     calculate_dataset_statistics,
 )
+from gluonts.exceptions import GluonTSDataError
 
 
 def make_dummy_dynamic_feat(target, num_features) -> np.ndarray:
@@ -178,7 +178,7 @@ class DatasetStatisticsTest(unittest.TestCase):
 
         # generates 2 ** N - 1 timeseries with constant increasing values
         N = 6
-        n = 2 ** N - 1
+        n = 2**N - 1
         T = 5
         targets = np.ones((n, T))
         for i in range(0, n):
@@ -194,7 +194,7 @@ class DatasetStatisticsTest(unittest.TestCase):
         hist = found.scale_histogram.bin_counts
         for i in range(0, N):
             assert i in hist
-            assert hist[i] == 2 ** i
+            assert hist[i] == 2**i
 
 
 class DatasetStatisticsExceptions(unittest.TestCase):

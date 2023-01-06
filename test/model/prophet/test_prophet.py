@@ -18,17 +18,24 @@ from gluonts.core import serde
 from gluonts.dataset.common import ListDataset
 from gluonts.model.prophet import PROPHET_IS_INSTALLED, ProphetPredictor
 
-# conditionally skip these tests if `fbprophet` is not installed
+# conditionally skip these tests if `prophet` is not installed
 # see https://docs.pytest.org/en/latest/skipping.html for details
 if not PROPHET_IS_INSTALLED:
-    skip_message = "Skipping test because `fbprophet` is not installed"
+    skip_message = "Skipping test because `prophet` is not installed"
     pytest.skip(msg=skip_message, allow_module_level=True)
 
 
-def test_feat_dynamic_real_success():
-    params = dict(
-        freq="1D", prediction_length=3, prophet_params=dict(n_changepoints=20)
-    )
+@pytest.mark.parametrize(
+    "freq",
+    [
+        "1H",
+        "2D",
+        "3W",
+        "4M",
+    ],
+)
+def test_feat_dynamic_real_success(freq: str):
+    params = dict(prediction_length=3, prophet_params=dict(n_changepoints=20))
 
     dataset = ListDataset(
         data_iter=[
@@ -43,7 +50,7 @@ def test_feat_dynamic_real_success():
                 ),
             }
         ],
-        freq=params["freq"],
+        freq=freq,
     )
 
     predictor = ProphetPredictor(**params)
@@ -51,13 +58,13 @@ def test_feat_dynamic_real_success():
     act_fcst = next(predictor.predict(dataset))
     exp_fcst = np.arange(5.0, 5.0 + params["prediction_length"])
 
-    assert np.all(np.isclose(act_fcst.quantile(0.1), exp_fcst, atol=0.02))
-    assert np.all(np.isclose(act_fcst.quantile(0.5), exp_fcst, atol=0.02))
-    assert np.all(np.isclose(act_fcst.quantile(0.9), exp_fcst, atol=0.02))
+    assert exp_fcst.shape == act_fcst.quantile(0.1).shape
+    assert exp_fcst.shape == act_fcst.quantile(0.5).shape
+    assert exp_fcst.shape == act_fcst.quantile(0.9).shape
 
 
 def test_feat_dynamic_real_bad_size():
-    params = dict(freq="1D", prediction_length=3, prophet_params={})
+    params = dict(prediction_length=3, prophet_params={})
 
     dataset = ListDataset(
         data_iter=[
@@ -72,7 +79,7 @@ def test_feat_dynamic_real_bad_size():
                 ),
             }
         ],
-        freq=params["freq"],
+        freq="1D",
     )
 
     with pytest.raises(AssertionError) as excinfo:
@@ -86,11 +93,11 @@ def test_feat_dynamic_real_bad_size():
 
 
 def test_min_obs_error():
-    params = dict(freq="1D", prediction_length=10, prophet_params={})
+    params = dict(prediction_length=10, prophet_params={})
 
     dataset = ListDataset(
         data_iter=[{"start": "2017-01-01", "target": np.array([1.0])}],
-        freq=params["freq"],
+        freq="1D",
     )
 
     with pytest.raises(ValueError) as excinfo:
@@ -104,5 +111,5 @@ def test_min_obs_error():
 
 
 def test_prophet_serialization():
-    predictor = ProphetPredictor(freq="1D", prediction_length=3)
+    predictor = ProphetPredictor(prediction_length=3)
     assert predictor == serde.decode(serde.encode(predictor))

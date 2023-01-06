@@ -12,78 +12,20 @@
 # permissions and limitations under the License.
 
 from typing import List, Optional
-import torch
+
 import pytest
+import torch
 
-from gluonts.torch.model.deepar import (
-    DeepARModel,
-    DeepARLightningModule,
-)
-from gluonts.torch.model.deepar.module import LaggedLSTM
+from gluonts.torch.model.deepar import DeepARLightningModule, DeepARModel
 
 
 @pytest.mark.parametrize(
-    "model, prior_input, input, features, more_input, more_features",
+    "num_feat_dynamic_real, num_feat_static_real, num_feat_static_cat, cardinality, scaling",
     [
-        (
-            LaggedLSTM(
-                input_size=1, features_size=3, lags_seq=[0, 1, 5, 10, 20]
-            ),
-            torch.ones((4, 100)),
-            torch.ones((4, 8)),
-            torch.ones((4, 8, 3)),
-            torch.ones((4, 5)),
-            torch.ones((4, 5, 3)),
-        ),
-        (
-            LaggedLSTM(
-                input_size=1, features_size=3, lags_seq=[0, 1, 5, 10, 20]
-            ),
-            torch.ones((4, 100, 1)),
-            torch.ones((4, 8, 1)),
-            torch.ones((4, 8, 3)),
-            torch.ones((4, 5, 1)),
-            torch.ones((4, 5, 3)),
-        ),
-        (
-            LaggedLSTM(
-                input_size=2, features_size=3, lags_seq=[0, 1, 5, 10, 20]
-            ),
-            torch.ones((4, 100, 2)),
-            torch.ones((4, 8, 2)),
-            torch.ones((4, 8, 3)),
-            torch.ones((4, 5, 2)),
-            torch.ones((4, 5, 3)),
-        ),
-    ],
-)
-def test_lagged_lstm(
-    model: LaggedLSTM,
-    prior_input: torch.Tensor,
-    input: torch.Tensor,
-    features: torch.Tensor,
-    more_input: torch.Tensor,
-    more_features: torch.Tensor,
-):
-    torch.jit.script(model)
-    output, state = model(prior_input, input, features=features)
-    assert output.shape[:2] == input.shape[:2]
-    more_output, state = model(
-        torch.cat((prior_input, input), dim=1),
-        more_input,
-        features=more_features,
-        state=state,
-    )
-    assert more_output.shape[:2] == more_input.shape[:2]
-
-
-@pytest.mark.parametrize(
-    "num_feat_dynamic_real, num_feat_static_real, num_feat_static_cat, cardinality",
-    [
-        (5, 4, 1, [1]),
-        (1, 4, 2, [2, 3]),
-        (5, 1, 3, [4, 5, 6]),
-        (5, 4, 1, [1]),
+        (5, 4, 1, [1], True),
+        (1, 4, 2, [2, 3], False),
+        (5, 1, 3, [4, 5, 6], True),
+        (5, 4, 1, [1], False),
     ],
 )
 def test_deepar_modules(
@@ -91,6 +33,7 @@ def test_deepar_modules(
     num_feat_static_real: int,
     num_feat_static_cat: int,
     cardinality: Optional[List[int]],
+    scaling: bool,
 ):
     batch_size = 4
     prediction_length = 6
@@ -104,6 +47,7 @@ def test_deepar_modules(
         num_feat_static_real=num_feat_static_real,
         num_feat_static_cat=num_feat_static_cat,
         cardinality=cardinality,
+        scaling=scaling,
     )
 
     # TODO uncomment the following
@@ -124,7 +68,7 @@ def test_deepar_modules(
     future_target = torch.ones(batch_size, prediction_length)
     future_observed_values = torch.ones(batch_size, prediction_length)
 
-    params, scale, _, _ = model.unroll_lagged_rnn(
+    params, scale, _, _, _ = model.unroll_lagged_rnn(
         feat_static_cat,
         feat_static_real,
         past_time_feat,

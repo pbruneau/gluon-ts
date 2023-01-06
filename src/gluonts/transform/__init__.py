@@ -45,7 +45,6 @@ __all__ = [
     "SelectFields",
     "SetField",
     "SetFieldIfNotPresent",
-    "shift_timestamp",
     "SimpleTransformation",
     "SwapAxes",
     "target_transformation_length",
@@ -125,10 +124,4 @@ from .split import (
     CanonicalInstanceSplitter,
     ContinuousTimeInstanceSplitter,
     InstanceSplitter,
-    shift_timestamp,
 )
-
-# fix Sphinx issues, see https://bit.ly/2K2eptM
-for item in __all__:
-    if hasattr(item, "__module__"):
-        setattr(item, "__module__", __name__)

@@ -18,9 +18,11 @@ from types import SimpleNamespace
 from typing import Dict
 
 import numpy as np
-from gluonts import json
-from gluonts.nursery import glide
 from toolz import compose_left
+
+from gluonts import json
+from gluonts.exceptions import GluonTSDataError
+from gluonts.nursery import glide
 
 parse_bool = compose_left(strtobool, bool)
 
@@ -70,7 +72,9 @@ def convert_base(text: str) -> str:
     try:
         return BASE_FREQ_TO_PANDAS_OFFSET[text]
     except KeyError:
-        raise ValueError(f'"{text}" is not recognized as a frequency string')
+        raise GluonTSDataError(
+            f'"{text}" is not recognized as a frequency string'
+        )
 
 
 def convert_multiple(text: str) -> str:
@@ -102,9 +106,10 @@ class TSFReader:
 
             data_tag_found = self._read_header(lines)
             assert data_tag_found, "Missing @data tag."
-            assert (
-                self.meta.columns
-            ), "Missing attribute section. Attribute section must come before data."
+            assert self.meta.columns, (
+                "Missing attribute section. Attribute section must come before"
+                " data."
+            )
 
             assert self.target_name not in self.meta.columns
             self.meta.columns[self.target_name] = None
@@ -124,15 +129,16 @@ class TSFReader:
         return False
 
     def _read_data_section(self, lines):
-        lines = list(lines)
-
-        lines = glide.imap_unordered(
-            self._read_data, lines, num_workers=cpu_count(), batch_size=8092
+        # Enumerate here to keep the indices
+        data = list(enumerate(lines))
+        result = glide.imap_unordered(
+            self._read_data, data, num_workers=cpu_count(), batch_size=8092
         )
+        # Sort by index here to ensure that the order is deterministic
+        return [x[1] for x in sorted(result, key=lambda x: x[0])]
 
-        return list(lines)
-
-    def _read_data(self, line):
+    def _read_data(self, data):
+        idx, line = data
         parts = line.split(":")
 
         assert len(parts) == len(
@@ -148,15 +154,17 @@ class TSFReader:
         for (column, ty), attr in zip(self.meta.columns.items(), attributes):
             record[column] = parse_attribute(ty, attr)
 
-        return record
+        return idx, record
 
     def _data_target(self, s):
         s = s.replace("?", '"nan"')
 
         values = json.loads(f"[{s}]")
-        assert (
-            values
-        ), "A given series should contains a set of comma separated numeric values. At least one numeric value should be there in a series. Missing values should be indicated with ? symbol"
+        assert values, (
+            "A given series should contains a set of comma separated numeric"
+            " values. At least one numeric value should be there in a series."
+            " Missing values should be indicated with ? symbol"
+        )
 
         return np.array(values, dtype=float)
 

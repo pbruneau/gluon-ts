@@ -13,16 +13,19 @@
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import List, Dict, NamedTuple
+from typing import Dict, List, NamedTuple, Optional
 from urllib import request
 from zipfile import ZipFile
 
-from gluonts import json
-from gluonts.dataset import jsonl
+from pandas.tseries.frequencies import to_offset
+
+from gluonts.dataset import DatasetWriter
+from gluonts.dataset.common import MetaData, TrainDatasets
+from gluonts.dataset.field_names import FieldName
 from gluonts.gluonts_tqdm import tqdm
 
-from ._tsf_reader import frequency_converter, TSFReader
-from ._util import metadata, to_dict, request_retrieve_hook
+from ._tsf_reader import TSFReader, frequency_converter
+from ._util import metadata, request_retrieve_hook
 
 
 class Dataset(NamedTuple):
@@ -95,48 +98,98 @@ datasets = {
         file_name="tourism_yearly_dataset.zip",
         record="4656103",
     ),
+    "cif_2016": Dataset(
+        file_name="cif_2016_dataset.zip",
+        record="4656042",
+    ),
+    "london_smart_meters_without_missing": Dataset(
+        file_name="london_smart_meters_dataset_without_missing_values.zip",
+        record="4656091",
+    ),
+    "wind_farms_without_missing": Dataset(
+        file_name="wind_farms_minutely_dataset_without_missing_values.zip",
+        record="4654858",
+    ),
+    "car_parts_without_missing": Dataset(
+        file_name="car_parts_dataset_without_missing_values.zip",
+        record="4656021",
+    ),
+    "dominick": Dataset(
+        file_name="dominick_dataset.zip",
+        record="4654802",
+    ),
+    "fred_md": Dataset(
+        file_name="fred_md_dataset.zip",
+        record="4654833",
+    ),
+    "pedestrian_counts": Dataset(
+        file_name="pedestrian_counts_dataset.zip",
+        record="4656626",
+    ),
+    "hospital": Dataset(
+        file_name="hospital_dataset.zip",
+        record="4656014",
+    ),
+    "covid_deaths": Dataset(
+        file_name="covid_deaths_dataset.zip",
+        record="4656009",
+    ),
+    "kdd_cup_2018_without_missing": Dataset(
+        file_name="kdd_cup_2018_dataset_without_missing_values.zip",
+        record="4656756",
+    ),
+    "weather": Dataset(
+        file_name="weather_dataset.zip",
+        record="4654822",
+    ),
 }
 
 
-def save_metadata(
-    dataset_path: Path, cardinality: int, freq: str, prediction_length: int
+def convert_data(
+    data: List[Dict],
+    train_offset: int,
+    default_start_timestamp: Optional[str] = None,
 ):
-    with open(dataset_path / "metadata.json", "w") as file:
-        json.dump(
-            metadata(
-                cardinality=cardinality,
-                freq=freq,
-                prediction_length=prediction_length,
-            ),
-            file,
+    train_data = []
+    test_data = []
+    for i, data_entry in tqdm(
+        enumerate(data), total=len(data), desc="creating json files"
+    ):
+        # Convert the data to a GluonTS dataset...
+        # - `default_start_timestamp` is required for some datasets which
+        #   are not listed here since some datasets do not define start
+        #   timestamps
+        # - `item_id` is added for all datasets ... many datasets provide
+        #   the "series_name"
+        test_data.append(
+            {
+                "target": data_entry["target"],
+                "start": str(
+                    data_entry.get("start_timestamp", default_start_timestamp)
+                ),
+                "item_id": data_entry.get("series_name", i),
+            }
         )
 
+        train_data.append(
+            {
+                "target": data_entry["target"][:-train_offset],
+                "start": str(
+                    data_entry.get("start_timestamp", default_start_timestamp)
+                ),
+                "item_id": data_entry.get("series_name", i),
+            }
+        )
 
-def save_datasets(path: Path, data: List[Dict], train_offset: int):
-    train = path / "train"
-    test = path / "test"
-
-    train.mkdir(exist_ok=True)
-    test.mkdir(exist_ok=True)
-
-    with open(train / "data.json", "w") as train_fp, open(
-        test / "data.json", "w"
-    ) as test_fp:
-        for data_entry in tqdm(
-            data, total=len(data), desc="creating json files"
-        ):
-            dic = to_dict(
-                target_values=data_entry["target"],
-                start=str(data_entry["start_timestamp"]),
-            )
-
-            jsonl.dump([dic], test_fp)
-
-            dic["target"] = dic["target"][:-train_offset]
-            jsonl.dump([dic], train_fp)
+    return train_data, test_data
 
 
-def generate_forecasting_dataset(dataset_path: Path, dataset_name: str):
+def generate_forecasting_dataset(
+    dataset_path: Path,
+    dataset_name: str,
+    dataset_writer: DatasetWriter,
+    prediction_length: Optional[int] = None,
+):
     dataset = datasets[dataset_name]
     dataset_path.mkdir(exist_ok=True)
 
@@ -150,13 +203,49 @@ def generate_forecasting_dataset(dataset_path: Path, dataset_name: str):
         reader = TSFReader(temp_path / archive.namelist()[0])
         meta, data = reader.read()
 
-    prediction_length = int(meta.forecast_horizon)
+    freq = frequency_converter(meta.frequency)
+    if prediction_length is None:
+        if hasattr(meta, "forecast_horizon"):
+            prediction_length = int(meta.forecast_horizon)
+        else:
+            prediction_length = default_prediction_length_from_frequency(freq)
 
-    save_metadata(
-        dataset_path,
-        len(data),
-        frequency_converter(meta.frequency),
-        prediction_length,
+    # Impute missing start dates with unix epoch and remove time series whose
+    # length is less than or equal to the prediction length
+    data = [
+        {**d, "start_timestamp": d.get("start_timestamp", "1970-01-01")}
+        for d in data
+        if len(d[FieldName.TARGET]) > prediction_length
+    ]
+    train_data, test_data = convert_data(data, prediction_length)
+
+    meta = MetaData(
+        **metadata(
+            cardinality=len(data),
+            freq=freq,
+            prediction_length=prediction_length,
+        )
     )
 
-    save_datasets(dataset_path, data, prediction_length)
+    dataset = TrainDatasets(metadata=meta, train=train_data, test=test_data)
+    dataset.save(
+        path_str=str(dataset_path), writer=dataset_writer, overwrite=True
+    )
+
+
+def default_prediction_length_from_frequency(freq: str) -> int:
+    prediction_length_map = {
+        "T": 60,
+        "H": 48,
+        "D": 30,
+        "W-SUN": 8,
+        "M": 12,
+        "Y": 4,
+    }
+    try:
+        freq = to_offset(freq).name
+        return prediction_length_map[freq]
+    except KeyError as err:
+        raise ValueError(
+            f"Cannot obtain default prediction length from frequency `{freq}`."
+        ) from err

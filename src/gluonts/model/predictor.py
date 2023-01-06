@@ -28,9 +28,9 @@ import numpy as np
 import gluonts
 from gluonts.core import fqname_for
 from gluonts.core.component import equals, from_hyperparameters, validated
-from gluonts.core.exception import GluonTSException
 from gluonts.core.serde import dump_json, load_json
 from gluonts.dataset.common import DataEntry, Dataset
+from gluonts.exceptions import GluonTSException
 from gluonts.model.forecast import Forecast
 
 if TYPE_CHECKING:  # avoid circular import
@@ -47,22 +47,17 @@ class Predictor:
     ----------
     prediction_length
         Prediction horizon.
-    freq
-        Frequency of the predicted data.
     """
 
     __version__: str = gluonts.__version__
 
-    def __init__(
-        self, prediction_length: int, freq: str, lead_time: int = 0
-    ) -> None:
+    def __init__(self, prediction_length: int, lead_time: int = 0) -> None:
         assert (
             prediction_length > 0
         ), "The value of `prediction_length` should be > 0"
         assert lead_time >= 0, "The value of `lead_time` should be >= 0"
 
         self.prediction_length = prediction_length
-        self.freq = freq
         self.lead_time = lead_time
 
     def predict(self, dataset: Dataset, **kwargs) -> Iterator[Forecast]:
@@ -94,7 +89,7 @@ class Predictor:
     @classmethod
     def deserialize(cls, path: Path, **kwargs) -> "Predictor":
         """
-        Load a serialized predictor from the given path
+        Load a serialized predictor from the given path.
 
         Parameters
         ----------
@@ -102,15 +97,19 @@ class Predictor:
             Path to the serialized files predictor.
         **kwargs
             Optional context/device parameter to be used with the predictor.
-            If nothing is passed will use the GPU if available and CPU otherwise.
+            If nothing is passed will use the GPU if available and CPU
+            otherwise.
         """
         # deserialize Predictor type
         with (path / "type.txt").open("r") as fp:
-            tpe = locate(fp.readline())
+            tpe_str = fp.readline()
+
+        tpe = locate(tpe_str)
+        assert tpe is not None, f"Cannot locate {tpe_str}."
 
         # ensure that predictor_cls is a subtype of Predictor
         if not issubclass(tpe, Predictor):
-            raise IOError(
+            raise OSError(
                 f"Class {fqname_for(tpe)} is not "
                 f"a subclass of {fqname_for(Predictor)}"
             )
@@ -128,7 +127,8 @@ class Predictor:
 
     @classmethod
     def from_inputs(cls, train_iter, **params):
-        # auto_params usually include `use_feat_dynamic_real`, `use_feat_static_cat` and `cardinality`
+        # auto_params usually include `use_feat_dynamic_real`,
+        # `use_feat_static_cat` and `cardinality`
         auto_params = cls.derive_auto_fields(train_iter)
         # user specified 'params' will take precedence:
         params = {**auto_params, **params}
@@ -139,22 +139,19 @@ class RepresentablePredictor(Predictor):
     """
     An abstract predictor that can be subclassed by models that are not based
     on Gluon. Subclasses should have @validated() constructors.
-    (De)serialization and value equality are all implemented on top of the
+    (De)serialization and value equality are all implemented on top of the.
+
     @validated() logic.
     Parameters
     ----------
     prediction_length
         Prediction horizon.
-    freq
-        Frequency of the predicted data.
     """
 
     @validated()
-    def __init__(
-        self, prediction_length: int, freq: str, lead_time: int = 0
-    ) -> None:
+    def __init__(self, prediction_length: int, lead_time: int = 0) -> None:
         super().__init__(
-            freq=freq, lead_time=lead_time, prediction_length=prediction_length
+            lead_time=lead_time, prediction_length=prediction_length
         )
 
     def predict(self, dataset: Dataset, **kwargs) -> Iterator[Forecast]:
@@ -166,8 +163,8 @@ class RepresentablePredictor(Predictor):
 
     def __eq__(self, that):
         """
-        Two RepresentablePredictor instances are considered equal if they
-        have the same constructor arguments.
+        Two RepresentablePredictor instances are considered equal if they have
+        the same constructor arguments.
         """
         return equals(self, that)
 
@@ -197,8 +194,9 @@ def _worker_loop(
 ):
     """
     Worker loop for multiprocessing Predictor.
-    Loads the predictor serialized in predictor_path
-    reads inputs from input_queue and writes forecasts to output_queue
+
+    Loads the predictor serialized in predictor_path reads inputs from
+    input_queue and writes forecasts to output_queue
     """
 
     predictor = Predictor.deserialize(predictor_path)
@@ -245,7 +243,6 @@ class ParallelizedPredictor(Predictor):
         chunk_size=1,
     ) -> None:
         super().__init__(
-            freq=base_predictor.freq,
             lead_time=base_predictor.lead_time,
             prediction_length=base_predictor.prediction_length,
         )
@@ -322,8 +319,7 @@ class ParallelizedPredictor(Predictor):
                 while self._next_idx in self._data_buffer:
                     result_batch = self._data_buffer.pop(self._next_idx)
                     self._next_idx += 1
-                    for result in result_batch:
-                        yield result
+                    yield from result_batch
 
             def send(worker_id, chunk):
                 q = self._input_queues[worker_id]
@@ -338,8 +334,7 @@ class ParallelizedPredictor(Predictor):
 
                 while True:
                     idx, wid, result = receive()
-                    for res in get_next_from_buffer():
-                        yield res
+                    yield from get_next_from_buffer()
                     chunk = next(chunked_data)
                     send(wid, chunk)
             except StopIteration:
@@ -353,16 +348,16 @@ class ParallelizedPredictor(Predictor):
                 if idx is None:
                     self._num_running_workers -= 1
                     continue
-                for res in get_next_from_buffer():
-                    yield res
+                yield from get_next_from_buffer()
             assert len(self._data_buffer) == 0
             assert self._send_idx == self._next_idx
 
 
 class Localizer(Predictor):
     """
-    A Predictor that uses an estimator to train a local model per time series and
-    immediatly calls this to predict.
+    A Predictor that uses an estimator to train a local model per time series
+    and immediately calls this to predict.
+
     Parameters
     ----------
     estimator
@@ -371,7 +366,6 @@ class Localizer(Predictor):
 
     def __init__(self, estimator: "Estimator"):
         super().__init__(
-            freq=estimator.freq,
             lead_time=estimator.lead_time,
             prediction_length=estimator.prediction_length,
         )

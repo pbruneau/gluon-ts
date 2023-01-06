@@ -17,8 +17,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from gluonts.core.exception import GluonTSDataError
 from gluonts.dataset.common import DataEntry, Dataset, ListDataset
+from gluonts.exceptions import GluonTSDataError
 from gluonts.model.npts import KernelType, NPTSPredictor
 from gluonts.model.npts._weighted_sampler import WeightedSampler
 
@@ -582,7 +582,7 @@ def _inject_nans_in_target(data_entry: DataEntry, p: float) -> DataEntry:
     """
     nan_positions = np.sort(
         a=np.random.choice(
-            a=np.arange(data_entry["target"].size, dtype=np.int),
+            a=np.arange(data_entry["target"].size, dtype=int),
             size=int(p * data_entry["target"].size),
             replace=False,
         )

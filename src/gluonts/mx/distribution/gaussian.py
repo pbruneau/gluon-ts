@@ -153,8 +153,7 @@ class GaussianOutput(DistributionOutput):
             same entries as `mu` and the second has entries mapped to the
             positive orthant.
         """
-        # patched following https://github.com/awslabs/gluon-ts/pull/1893
-        sigma = softplus(F, sigma) + epsilon
+        sigma = F.maximum(softplus(F, sigma), cls.eps())
         return mu.squeeze(axis=-1), sigma.squeeze(axis=-1)
 
     @property

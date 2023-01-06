@@ -18,20 +18,23 @@ import statsmodels.api as sm
 
 from gluonts.core.component import validated
 from gluonts.dataset.common import DataEntry
+from gluonts.dataset.util import forecast_start
 from gluonts.model.forecast import Forecast, SampleForecast
 from gluonts.model.predictor import RepresentablePredictor
-from gluonts.support.pandas import forecast_start
 from gluonts.time_feature import get_seasonality
 
 
 def seasonality_test(past_ts_data: np.array, season_length: int) -> bool:
     """
-    Test the time-series for seasonal patterns by performing a 90% auto-correlation test:
+    Test the time series for seasonal patterns by performing a 90% auto-
+    correlation test:
 
-    As described here: https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-Guide.pdf
-    Code based on: https://github.com/Mcompetitions/M4-methods/blob/master/Benchmarks%20and%20Evaluation.R
+    As described here:
+    https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-Guide.pdf
+    Code based on:
+    https://github.com/Mcompetitions/M4-methods/blob/master/Benchmarks%20and%20Evaluation.R
     """
-    critical_z_score = 1.645  # corresponds to 90% confidence interval
+    critical_z_score = 1.645  # corresponds to 90% prediction interval
     if len(past_ts_data) < 3 * season_length:
         return False
     else:
@@ -63,8 +66,10 @@ def naive_2(
 
     If specified, `season_length` takes precedence.
 
-    As described here: https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-Guide.pdf
-    Code based on: https://github.com/Mcompetitions/M4-methods/blob/master/Benchmarks%20and%20Evaluation.R
+    As described here:
+    https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-Guide.pdf
+    Code based on:
+    https://github.com/Mcompetitions/M4-methods/blob/master/Benchmarks%20and%20Evaluation.R
     """
     assert freq is not None or season_length is not None, (
         "Either the frequency or season length of the time series "
@@ -80,7 +85,8 @@ def naive_2(
 
     # it has seasonality, then calculate the multiplicative seasonal component
     if has_seasonality:
-        # TODO: think about maybe only using past_ts_data[- max(5*season_length, 2*prediction_length):] for speedup
+        # TODO: think about maybe only using past_ts_data[- max
+        # (5*season_length, 2*prediction_length):] for speedup
         seasonal_decomposition = sm.tsa.seasonal_decompose(
             x=past_ts_data, period=season_length, model="multiplicative"
         ).seasonal
@@ -111,7 +117,8 @@ def naive_2(
 class Naive2Predictor(RepresentablePredictor):
     """
     Naïve 2 forecaster as described in the M4 Competition Guide:
-    https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-Guide.pdf
+    https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-
+    Guide.pdf.
 
     The python analogue implementation to:
     https://github.com/Mcompetitions/M4-methods/blob/master/Benchmarks%20and%20Evaluation.R#L118
@@ -129,15 +136,19 @@ class Naive2Predictor(RepresentablePredictor):
     @validated()
     def __init__(
         self,
-        freq: str,
         prediction_length: int,
+        freq: Optional[str] = None,
         season_length: Optional[int] = None,
     ) -> None:
-        super().__init__(freq=freq, prediction_length=prediction_length)
+        super().__init__(prediction_length=prediction_length)
 
         assert (
             season_length is None or season_length > 0
         ), "The value of `season_length` should be > 0"
+        assert freq is not None or season_length is not None, (
+            "Either the frequency or season length of the time series "
+            "has to be specified. "
+        )
 
         self.freq = freq
         self.prediction_length = prediction_length
@@ -163,6 +174,5 @@ class Naive2Predictor(RepresentablePredictor):
         return SampleForecast(
             samples=samples,
             start_date=forecast_start_time,
-            freq=self.freq,
             item_id=item_id,
         )

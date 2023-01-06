@@ -13,7 +13,6 @@
 
 import json
 import logging
-import multiprocessing
 from typing import Any, Optional, Type, Union
 
 import gluonts
@@ -21,17 +20,15 @@ from gluonts.core import fqname_for
 from gluonts.core.serde import dump_code
 from gluonts.dataset.common import Dataset
 from gluonts.evaluation import Evaluator, backtest
-from gluonts.model.estimator import Estimator
+from gluonts.model.estimator import Estimator, IncrementallyTrainable
 from gluonts.model.forecast import Quantile
-from gluonts.model.forecast_generator import QuantileForecastGenerator
 from gluonts.model.predictor import Predictor
-from gluonts.support.util import maybe_len
+from gluonts.itertools import maybe_len
 from gluonts.transform import FilterTransformation
 
 from .env import TrainEnv
 from .util import invoke_with
 
-multiprocessing.set_start_method("spawn", force=True)
 logger = logging.getLogger(__name__)
 
 
@@ -60,7 +57,7 @@ def run_train_and_test(
         env.datasets["train"], **env.hyperparameters
     )
     logger.info(
-        f"The forecaster can be reconstructed with the following expression: "
+        "The forecaster can be reconstructed with the following expression: "
         f"{dump_code(forecaster)}"
     )
 
@@ -72,6 +69,7 @@ def run_train_and_test(
             train_dataset=env.datasets["train"],
             validation_dataset=env.datasets.get("validation"),
             hyperparameters=env.hyperparameters,
+            from_predictor=env.datasets.get("model"),
         )
 
     predictor.serialize(env.path.model)
@@ -85,6 +83,7 @@ def run_train(
     train_dataset: Dataset,
     hyperparameters: dict,
     validation_dataset: Optional[Dataset],
+    from_predictor: Optional[Predictor],
 ) -> Predictor:
     num_workers = (
         int(hyperparameters["num_workers"])
@@ -101,6 +100,21 @@ def run_train(
         if "num_prefetch" in hyperparameters
         else None
     )
+
+    if from_predictor is not None:
+        assert isinstance(forecaster, IncrementallyTrainable), (
+            "The model provided does not implement the "
+            "IncrementallyTrainable protocol"
+        )
+        return invoke_with(
+            forecaster.train_from,
+            from_predictor,
+            training_data=train_dataset,
+            validation_data=validation_dataset,
+            num_workers=num_workers,
+            num_prefetch=num_prefetch,
+            shuffle_buffer_length=shuffle_buffer_length,
+        )
 
     return invoke_with(
         forecaster.train,
@@ -128,8 +142,8 @@ def run_test(
 
     if len_original is not None and len_original > len_filtered:
         logger.warning(
-            f"Not all time-series in the test-channel have "
-            f"enough data to be used for evaluation. Proceeding with "
+            "Not all time series in the test-channel have "
+            "enough data to be used for evaluation. Proceeding with "
             f"{len_filtered}/{len_original} "
             f"(~{int(len_filtered / len_original * 100)}%) items."
         )
@@ -146,18 +160,6 @@ def run_test(
         if "test_quantiles" in hyperparameters
         else None
     )
-
-    forecast_generator = getattr(predictor, "forecast_generator", None)
-    if isinstance(forecast_generator, QuantileForecastGenerator):
-        predictor_quantiles = forecast_generator.quantiles
-        if test_quantiles is None:
-            test_quantiles = predictor_quantiles
-        elif not set(test_quantiles).issubset(predictor_quantiles):
-            logger.warning(
-                f"Some of the evaluation quantiles `{test_quantiles}` are "
-                f"not in the computed quantile forecasts `{predictor_quantiles}`."
-            )
-            test_quantiles = predictor_quantiles
 
     if test_quantiles is not None:
         logger.info(f"Using quantiles `{test_quantiles}` for evaluation.")

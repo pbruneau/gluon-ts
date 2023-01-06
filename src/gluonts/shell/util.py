@@ -15,54 +15,30 @@ import inspect
 import pydoc
 from typing import Type, Union, cast
 
-import pkg_resources
 from toolz import keyfilter
 
-from gluonts.core.exception import GluonTSForecasterNotFoundError
 from gluonts.model.estimator import Estimator
 from gluonts.model.predictor import Predictor
+
+from .exceptions import ForecasterNotFound
 
 Forecaster = Type[Union[Estimator, Predictor]]
 
 
 def forecaster_type_by_name(name: str) -> Forecaster:
-    """
-    Loads a forecaster from the `gluonts_forecasters` entry_points namespace
-    by name.
+    forecaster = pydoc.locate(name)
 
-    If a forecater wasn't register under that name, it tries to locate the
-    class.
-
-    Third-party libraries can register their forecasters as follows by defining
-    a corresponding section in the `entry_points` section of their `setup.py`::
-
-        entry_points={
-            'gluonts_forecasters': [
-                'model_a = my_models.model_a:MyEstimator',
-                'model_b = my_models.model_b:MyPredictor',
-            ]
-        }
-    """
-    forecaster = None
-
-    for entry_point in pkg_resources.iter_entry_points("gluonts_forecasters"):
-        if entry_point.name == name:
-            forecaster = entry_point.load()
-            break
-    else:
-        forecaster = pydoc.locate(name)
-
-    if forecaster is None:
-        raise GluonTSForecasterNotFoundError(
-            f'Cannot locate estimator with classname "{name}".'
-        )
+    ForecasterNotFound.guard(
+        forecaster is not None,
+        f'Cannot locate estimator with classname "{name}".',
+    )
 
     return cast(Forecaster, forecaster)
 
 
 def invoke_with(fn, *args, **kwargs):
-    """Call `fn(*args, **kwargs)`, but only use kwargs that `fn` actually
-    uses.
+    """
+    Call `fn(*args, **kwargs)`, but only use kwargs that `fn` actually uses.
     """
 
     # if `fn` has `**kwargs` argument, we can just call it directly

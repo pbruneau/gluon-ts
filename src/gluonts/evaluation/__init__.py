@@ -11,17 +11,21 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-from ._base import Evaluator, MultivariateEvaluator
-from .backtest import make_evaluation_predictions, backtest_metrics
+from ._base import (
+    Evaluator,
+    MultivariateEvaluator,
+    aggregate_all,
+    aggregate_no_nan,
+    aggregate_valid,
+)
+from .backtest import backtest_metrics, make_evaluation_predictions
 
 __all__ = [
     "Evaluator",
     "MultivariateEvaluator",
     "make_evaluation_predictions",
     "backtest_metrics",
+    "aggregate_no_nan",
+    "aggregate_all",
+    "aggregate_valid",
 ]
-
-# fix Sphinx issues, see https://bit.ly/2K2eptM
-for item in __all__:
-    if hasattr(item, "__module__"):
-        setattr(item, "__module__", __name__)

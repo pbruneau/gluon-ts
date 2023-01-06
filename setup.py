@@ -30,7 +30,6 @@ try:
 
     HAS_SPHINX = True
 except ImportError:
-
     logging.warning(
         "Package 'sphinx' not found. You will not be able to build the docs."
     )
@@ -54,24 +53,19 @@ def find_requirements(filename):
         ]
 
 
-# miniver:
-def get_version_and_cmdclass(package_path):
-    """Load version.py module without importing the whole package.
+def get_version_and_cmdclass(version_file):
+    with open(version_file) as fobj:
+        code = fobj.read()
 
-    Template code from miniver
-    """
-    import os
-    from importlib.util import module_from_spec, spec_from_file_location
+    globals_ = {"__file__": str(version_file)}
+    exec(code, globals_)
 
-    spec = spec_from_file_location(
-        "version", os.path.join(package_path, "_version.py")
-    )
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.__version__, module.cmdclass
+    return globals_["__version__"], globals_["cmdclass"]()
 
 
-version, version_cmdclass = get_version_and_cmdclass("src/gluonts")
+version, version_cmdclass = get_version_and_cmdclass(
+    "src/gluonts/meta/_version.py"
+)
 
 
 class TypeCheckCommand(distutils.cmd.Command):
@@ -87,22 +81,26 @@ class TypeCheckCommand(distutils.cmd.Command):
         pass
 
     def run(self):
-        """Run command."""
-
         # import here (after the setup_requires list is loaded),
         # otherwise a module-not-found error is thrown
         import mypy.api
 
-        mypy_opts = ["--follow-imports=silent", "--ignore-missing-imports"]
-        mypy_args = [str(p.parent.resolve()) for p in SRC.glob("**/.typesafe")]
+        mypy_opts = [
+            "--allow-redefinition",
+            "--follow-imports=silent",
+            "--ignore-missing-imports",
+        ]
+
+        folders = [str(p.parent.resolve()) for p in SRC.glob("**/.typesafe")]
 
         print(
-            "the following folders contain a `.typesafe` marker file "
+            "The following folders contain a `.typesafe` marker file "
             "and will be type-checked with `mypy`:"
         )
-        print("\n".join(["  " + arg for arg in mypy_args]))
+        for folder in folders:
+            print(f"  {folder}")
 
-        std_out, std_err, exit_code = mypy.api.run(mypy_opts + mypy_args)
+        std_out, std_err, exit_code = mypy.api.run(mypy_opts + folders)
 
         print(std_out, file=sys.stdout)
         print(std_err, file=sys.stderr)
@@ -112,7 +110,7 @@ class TypeCheckCommand(distutils.cmd.Command):
                 f"""
                 Mypy command
 
-                    mypy {" ".join(mypy_opts + mypy_args)}
+                    mypy {" ".join(mypy_opts + folders)}
 
                 returned a non-zero exit code. Fix the type errors listed above
                 and then run
@@ -196,18 +194,21 @@ class StyleCheckCommand(distutils.cmd.Command):
             sys.exit(exit_code)
 
 
+arrow_require = find_requirements("requirements-arrow.txt")
 docs_require = find_requirements("requirements-docs.txt")
 tests_require = find_requirements("requirements-test.txt")
 sagemaker_api_require = find_requirements(
     "requirements-extras-sagemaker-sdk.txt"
 )
 shell_require = find_requirements("requirements-extras-shell.txt")
-setup_requires = find_requirements("requirements-setup.txt")
+mxnet_require = find_requirements("requirements-mxnet.txt")
+torch_require = find_requirements("requirements-pytorch.txt")
+
 dev_require = (
-    docs_require
+    arrow_require
+    + docs_require
     + tests_require
     + shell_require
-    + setup_requires
     + sagemaker_api_require
 )
 
@@ -220,7 +221,11 @@ setup_kwargs: dict = dict(
     ),
     long_description=read("README.md"),
     long_description_content_type="text/markdown",
-    url="https://github.com/awslabs/gluon-ts",
+    url="https://github.com/awslabs/gluonts/",
+    project_urls={
+        "Documentation": "https://ts.gluon.ai/stable/",
+        "Source Code": "https://github.com/awslabs/gluonts/",
+    },
     author="Amazon",
     author_email="gluon-ts-dev@amazon.com",
     maintainer_email="gluon-ts-dev@amazon.com",
@@ -229,54 +234,28 @@ setup_kwargs: dict = dict(
     package_dir={"": "src"},
     packages=find_namespace_packages(include=["gluonts*"], where=str(SRC)),
     include_package_data=True,
-    setup_requires=setup_requires,
     install_requires=find_requirements("requirements.txt"),
     tests_require=tests_require,
     extras_require={
+        "arrow": arrow_require,
         "dev": dev_require,
         "docs": docs_require,
+        "mxnet": mxnet_require,
         "R": find_requirements("requirements-extras-r.txt"),
         "Prophet": find_requirements("requirements-extras-prophet.txt"),
+        "pro": arrow_require + ["orjson"],
         "shell": shell_require,
+        "torch": torch_require,
     },
-    entry_points=dict(
-        gluonts_forecasters=[
-            "deepar=gluonts.model.deepar:DeepAREstimator",
-            "DeepAR=gluonts.model.deepar:DeepAREstimator",
-            "DeepFactor=gluonts.model.deep_factor:DeepFactorEstimator",
-            "DeepState=gluonts.model.deepstate:DeepStateEstimator",
-            "DeepVAR=gluonts.model.deepvar:DeepVAREstimator",
-            "GaussianProcess=gluonts.model.gp_forecaster:GaussianProcessEstimator",
-            "GPVAR=gluonts.model.gpvar:GPVAREstimator",
-            "LSTNet=gluonts.model.lstnet:LSTNetEstimator",
-            "NBEATS=gluonts.model.n_beats:NBEATSEstimator",
-            "NBEATSEnsemble=gluonts.model.n_beats:NBEATSEnsembleEstimator",
-            "NPTS=gluonts.model.npts:NPTSPredictor",
-            "Rotbaum=gluonts.model.rotbaum:TreeEstimator",
-            "SelfAttention=gluonts.model.san:SelfAttentionEstimator",
-            "SeasonalNaive=gluonts.model.seasonal_naive:SeasonalNaivePredictor",
-            "MQCNN=gluonts.model.seq2seq:MQCNNEstimator",
-            "MQRNN=gluonts.model.seq2seq:MQRNNEstimator",
-            "Seq2Seq=gluonts.model.seq2seq:Seq2SeqEstimator",
-            "SimpleFeedForward=gluonts.model.simple_feedforward:SimpleFeedForwardEstimator",
-            "TFT=gluonts.model.tft:TemporalFusionTransformerEstimator",
-            "DeepTPP=gluonts.model.tpp:DeepTPPEstimator",
-            "Transformer=gluonts.model.transformer:TransformerEstimator",
-            "Constant=gluonts.model.trivial.constant:ConstantPredictor",
-            "ConstantValue=gluonts.model.trivial.constant:ConstantValuePredictor",
-            "Identity=gluonts.model.trivial.identity:IdentityPredictor",
-            "Mean=gluonts.model.trivial.mean:MeanEstimator",
-            "MeanPredictor=gluonts.model.trivial.mean:MeanPredictor",
-            "MovingAverage=gluonts.model.trivial.mean:MovingAveragePredictor",
-            "WaveNet=gluonts.model.wavenet:WaveNetEstimator",
-            # "r=gluonts.model.r_forecast:RForecastPredictor [R]",
-            # "prophet=gluonts.model.prophet:ProphetPredictor [Prophet]",
-        ]
-    ),
     cmdclass={
         "type_check": TypeCheckCommand,
         "style_check": StyleCheckCommand,
         **version_cmdclass,
+    },
+    entry_points={
+        "pygments.styles": [
+            "gluonts-dark=gluonts.meta.style:Dark",
+        ]
     },
 )
 

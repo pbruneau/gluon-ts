@@ -31,8 +31,9 @@ Cardinality = Union[List[int], CardinalityLabel]
 
 class PreprocessGeneric:
     """
-    Class for the purpose of preprocessing time series. The method
-    make_features needs to be custom-made by inherited classes.
+    Class for the purpose of preprocessing time series.
+
+    The method make_features needs to be custom-made by inherited classes.
     """
 
     @validated()
@@ -44,6 +45,7 @@ class PreprocessGeneric:
         n_ignore_last: int = 0,
         max_n_datapts: int = 400000,
         seed: Optional[int] = None,
+        num_samples: Optional[int] = None,
         **kwargs
     ):
         """
@@ -79,10 +81,10 @@ class PreprocessGeneric:
         self.n_ignore_last = n_ignore_last
         self.max_n_datapts = max_n_datapts
         self.kwargs = kwargs
-        self.num_samples = None
+        self.num_samples = num_samples
         self.feature_data = None
         self.target_data = None
-        if seed:
+        if seed is not None:
             np.random.seed(seed)
 
     def make_features(self, time_series, starting_index):
@@ -200,7 +202,7 @@ class PreprocessGeneric:
     ) -> Tuple:
         """
         Applies self.preprocess_from_single_ts for each time series in ts_list,
-        and collates the results into self.feature_data and self.target_data
+        and collates the results into self.feature_data and self.target_data.
 
         Parameters
         ----------
@@ -244,20 +246,18 @@ class PreprocessGeneric:
 
     def get_num_samples(self, ts_list) -> int:
         """
-        Outputs a reasonable choice for number of windows to sample from
-        each time series at training time.
+        Outputs a reasonable choice for number of windows to sample from each
+        time series at training time.
         """
         n_time_series = sum(
-            [
-                len(time_series["target"])
-                - self.context_window_size
-                - self.forecast_horizon
-                >= 0
-                for time_series in ts_list
-            ]
+            len(time_series["target"])
+            - self.context_window_size
+            - self.forecast_horizon
+            >= 0
+            for time_series in ts_list
         )
         max_size_ts = max(
-            [len(time_series["target"]) for time_series in ts_list]
+            len(time_series["target"]) for time_series in ts_list
         )
         n_windows_per_time_series = self.max_n_datapts // n_time_series
         if n_time_series * 1000 < n_windows_per_time_series:
@@ -281,10 +281,14 @@ class PreprocessOnlyLagFeatures(PreprocessGeneric):
         n_ignore_last=0,
         num_samples=-1,
         use_feat_static_real=False,
+        use_past_feat_dynamic_real=False,
         use_feat_dynamic_real=False,
         use_feat_dynamic_cat=False,
         cardinality: Cardinality = CardinalityLabel.auto,
-        one_hot_encode: bool = True,  # Should improve accuracy but will slow down model
+        # Should improve accuracy but will slow down model
+        one_hot_encode: bool = True,
+        subtract_mean: bool = True,
+        count_nans: bool = False,
         **kwargs
     ):
 
@@ -292,7 +296,10 @@ class PreprocessOnlyLagFeatures(PreprocessGeneric):
             assert cardinality != "ignore" or (
                 isinstance(cardinality, List)
                 and all(c > 0 for c in cardinality)
-            ), "You should set `one_hot_encode=True` if and only if cardinality is a valid list or not ignored: {}"
+            ), (
+                "You should set `one_hot_encode=True` if and only if"
+                " cardinality is a valid list or not ignored: {}"
+            )
 
         super().__init__(
             context_window_size=context_window_size,
@@ -305,40 +312,56 @@ class PreprocessOnlyLagFeatures(PreprocessGeneric):
 
         self.use_feat_static_real = use_feat_static_real
         self.cardinality = cardinality
+        self.use_past_feat_dynamic_real = use_past_feat_dynamic_real
         self.use_feat_dynamic_real = use_feat_dynamic_real
         self.use_feat_dynamic_cat = use_feat_dynamic_cat
         self.one_hot_encode = one_hot_encode
+        self.subtract_mean = subtract_mean
+        self.count_nans = count_nans
 
     @classmethod
-    def _pre_transform(cls, time_series_window) -> Tuple:
+    def _pre_transform(
+        cls, time_series_window, subtract_mean, count_nans
+    ) -> Tuple:
         """
-        Makes features given time series window. Returns list of features,
-        one for every step of the lag (equaling mean-adjusted lag features);
-        and a dictionary of statistics features (one for mean and one for
-        standard deviation).
+        Makes features given time series window. Returns list of features, one
+        for every step of the lag (equaling mean-adjusted lag features); and a
+        dictionary of statistics features (one for mean and one for standard
+        deviation).
 
         Parameters
         ----------
         time_series_window: list
+        subtract_mean: bool
+            Whether or not to subtract the mean of the context window in the
+            feaurization process.
+        count_nans: bool
+            Whether or not to add as a feature the number of nan values in the
+            context window.
 
         Returns
         -------------
         tuple
-            trasnformed time series, dictionary with transformation data
-        return (time_series_window - np.mean(time_series_window)), {
-            'mean': np.mean(time_series_window),
-            'std': np.std(time_series_window)
-        }
+            trasnformed time series, dictionary with transformation data (
+            std, mean, number of lag features, and number of nans of
+            count_nans)
         """
-        mean_value = np.mean(time_series_window)
-        return (
-            (time_series_window - mean_value),
+        mean_value = np.nanmean(time_series_window)
+        featurized_data = [
+            time_series_window,
             {
                 "mean": mean_value,
-                "std": np.std(time_series_window),
+                "std": np.nanstd(time_series_window),
                 "n_lag_features": len(time_series_window),
             },
-        )
+        ]
+        if subtract_mean:
+            featurized_data[0] = featurized_data[0] - mean_value
+        if count_nans:
+            featurized_data[1]["n_nans"] = np.count_nonzero(
+                np.isnan(time_series_window)
+            )
+        return featurized_data
 
     def encode_one_hot(self, feat: int, cardinality: int) -> List[int]:
         result = [0] * cardinality
@@ -386,7 +409,7 @@ class PreprocessOnlyLagFeatures(PreprocessGeneric):
             prefix = []
         time_series_window = time_series["target"][starting_index:end_index]
         only_lag_features, transform_dict = self._pre_transform(
-            time_series_window
+            time_series_window, self.subtract_mean, self.count_nans
         )
 
         feat_static_real = (
@@ -403,13 +426,47 @@ class PreprocessOnlyLagFeatures(PreprocessGeneric):
         else:
             feat_static_cat = []
 
+        past_feat_dynamic_real = (
+            list(
+                chain(
+                    *[
+                        list(ent[0]) + list(ent[1].values())
+                        for ent in [
+                            self._pre_transform(ts[starting_index:end_index])
+                            for ts in time_series["past_feat_dynamic_real"]
+                        ]
+                    ]
+                )
+            )
+            if self.use_past_feat_dynamic_real
+            else []
+        )
         feat_dynamic_real = (
-            [elem for ent in time_series["feat_dynamic_real"] for elem in ent]
+            list(
+                chain(
+                    *[
+                        list(ent[0]) + list(ent[1].values())
+                        for ent in [
+                            self._pre_transform(
+                                ts[
+                                    starting_index : end_index
+                                    + self.forecast_horizon
+                                ]
+                            )
+                            for ts in time_series["feat_dynamic_real"]
+                        ]
+                    ]
+                )
+            )
             if self.use_feat_dynamic_real
             else []
         )
         feat_dynamic_cat = (
-            [elem for ent in time_series["feat_dynamic_cat"] for elem in ent]
+            [
+                elem
+                for ent in time_series["feat_dynamic_cat"]
+                for elem in ent[starting_index:end_index]
+            ]
             if self.use_feat_dynamic_cat
             else []
         )
@@ -425,7 +482,9 @@ class PreprocessOnlyLagFeatures(PreprocessGeneric):
             np.floor(np_feat_dynamic_cat) == np_feat_dynamic_cat
         )
 
-        feat_dynamics = feat_dynamic_real + feat_dynamic_cat
+        feat_dynamics = (
+            past_feat_dynamic_real + feat_dynamic_real + feat_dynamic_cat
+        )
         feat_statics = feat_static_real + feat_static_cat
         only_lag_features = list(only_lag_features)
         return (

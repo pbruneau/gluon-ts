@@ -11,12 +11,16 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-from ._estimator import WaveNetEstimator
-from ._network import WaveNet, WaveNetSampler
+import warnings
+
+from gluonts.mx.model.wavenet import WaveNetEstimator, WaveNet, WaveNetSampler
+
+warnings.warn(
+    "The module gluonts.model.wavenet has been moved to "
+    "gluonts.mx.model.wavenet. In GluonTS v0.12 it will be no longer "
+    "possible to use the old path. Try to use 'from gluonts.mx import "
+    "WaveNetEstimator'.",
+    FutureWarning,
+)
 
 __all__ = ["WaveNet", "WaveNetEstimator", "WaveNetSampler"]
-
-# fix Sphinx issues, see https://bit.ly/2K2eptM
-for item in __all__:
-    if hasattr(item, "__module__"):
-        setattr(item, "__module__", __name__)

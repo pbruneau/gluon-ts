@@ -11,11 +11,16 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-from ._estimator import GaussianProcessEstimator
+import warnings
+
+from gluonts.mx.model.gp_forecaster import GaussianProcessEstimator
+
+warnings.warn(
+    "The module gluonts.model.gp_forecaster has been moved to "
+    "gluonts.mx.model.gp_forecaster. In GluonTS v0.12 it will be no longer "
+    "possible to use the old path. Try to use 'from gluonts.mx import "
+    "GaussianProcessEstimator'.",
+    FutureWarning,
+)
 
 __all__ = ["GaussianProcessEstimator"]
-
-# fix Sphinx issues, see https://bit.ly/2K2eptM
-for item in __all__:
-    if hasattr(item, "__module__"):
-        setattr(item, "__module__", __name__)

@@ -15,7 +15,7 @@ from pprint import pprint
 import pandas as pd
 
 from gluonts.dataset.repository.datasets import get_dataset
-from gluonts.model.simple_feedforward import SimpleFeedForwardEstimator
+from gluonts.mx import SimpleFeedForwardEstimator
 from gluonts.mx.trainer import Trainer
 from gluonts.evaluation import make_evaluation_predictions, Evaluator
 from gluonts.dataset.rolling_dataset import (
@@ -28,7 +28,6 @@ if __name__ == "__main__":
 
     estimator = SimpleFeedForwardEstimator(
         prediction_length=dataset.metadata.prediction_length,
-        freq=dataset.metadata.freq,
         trainer=Trainer(epochs=5, num_batches_per_epoch=10),
     )
 

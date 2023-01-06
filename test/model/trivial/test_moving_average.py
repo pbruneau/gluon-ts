@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from gluonts.dataset.common import ListDataset
-from gluonts.model.trivial.mean import MovingAveragePredictor
+from gluonts.model.trivial._estimator import MovingAveragePredictor
 
 
 def get_predictions(
@@ -24,7 +24,6 @@ def get_predictions(
     mp = MovingAveragePredictor(
         prediction_length=prediction_length,
         context_length=context_length,
-        freq=freq,
     )
 
     ds = ListDataset([{"target": target, "start": start}], freq=freq)
