@@ -19,7 +19,7 @@ import logging
 import shutil
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, List, NamedTuple, Optional, Union, cast
+from typing import Callable, List, NamedTuple, Optional, Union, cast, Iterable, Iterator
 
 import numpy as np
 import pandas as pd
@@ -258,20 +258,11 @@ def ListDataset(
         )
     )
 
-# PBR
-def AugmentedListDataset(
-    data_iter: Dataset,
-    freq: str,
-    one_dim_target: bool = True,
-    use_timestamp: bool = False,
-    translate: Optional[dict] = None,
-    coeff: float = 0.02,
-    context_size: int = 48,        
-) -> List[DataEntry]:
+
+class AugmentedListDataset(Dataset):
     """
     ListDataset augmented by random linear combinations
     of input samples
-
     Parameters
     ----------
     data_iter
@@ -289,37 +280,20 @@ def AugmentedListDataset(
 
     def __init__(
         self,
-        data_iter: Dataset,
+        data_iter: Iterable[DataEntry],
         freq: str,
         one_dim_target: bool = True,
-        use_timestamp: bool = False,
-        translate: Optional[dict] = None,
-        coeff: float = 0.02,
-        context_size: int = 48,        
-    ) -> List[DataEntry]:
+    ) -> None:
         self.process = ProcessDataEntry(freq, one_dim_target)
         self.list_data = list(data_iter)  # dataset always cached
-        self.coeff = coeff
         self.dynamic_real_select = None
-        self.context_size = context_size
 
     def __iter__(self) -> Iterator[DataEntry]:
         source_name = "list_data"
-        # Basic idea is to split the dataset into roughly equally sized segments
-        # with lower and upper bound, where each worker is assigned one segment
         
-        bounds = util.get_bounds_for_mp_data_loading(len(self))
-        for row_number, data in enumerate(self.list_data):
-            if not bounds.lower <= row_number < bounds.upper:
-                continue
-            
+        for row_number, data in enumerate(self.list_data):            
             data = deepcopy(data)
-            
-            # jittering only the context, leaving target unchanged
-            noise = data['target'].values[:self.context_size] * \
-                np.random.normal(size=data['target'].values[:self.context_size].shape) * self.coeff
-            data['target'][:self.context_size] = np.clip(data['target'].values[:self.context_size] + noise, 0., MAX_VALUE)
-            
+                        
             if self.dynamic_real_select is not None:
                 data['feat_dynamic_real'] = [el for el in data['feat_dynamic_real'] 
                                              if el.name in self.dynamic_real_select]
