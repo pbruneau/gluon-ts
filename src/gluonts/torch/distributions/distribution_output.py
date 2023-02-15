@@ -24,12 +24,11 @@ from torch.distributions import (
     NegativeBinomial,
     Normal,
     Poisson,
-    StudentT,
 )
 
 from gluonts.core.component import validated
-from gluonts.torch.modules.lambda_layer import LambdaLayer
 from gluonts.torch.distributions import AffineTransformed
+from gluonts.torch.modules.lambda_layer import LambdaLayer
 
 
 class PtArgProj(nn.Module):
@@ -190,23 +189,6 @@ class NormalOutput(DistributionOutput):
         return ()
 
 
-class StudentTOutput(DistributionOutput):
-    args_dim: Dict[str, int] = {"df": 1, "loc": 1, "scale": 1}
-    distr_cls: type = StudentT
-
-    @classmethod
-    def domain_map(
-        cls, df: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor
-    ):
-        scale = F.softplus(scale)
-        df = 2.0 + F.softplus(df)
-        return df.squeeze(-1), loc.squeeze(-1), scale.squeeze(-1)
-
-    @property
-    def event_shape(self) -> Tuple:
-        return ()
-
-
 class BetaOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"concentration1": 1, "concentration0": 1}
     distr_cls: type = Beta
@@ -257,6 +239,22 @@ class PoissonOutput(DistributionOutput):
     def domain_map(cls, rate: torch.Tensor):
         rate_pos = F.softplus(rate).clone()
         return (rate_pos.squeeze(-1),)
+
+    # Overwrites the parent class method. We cannot scale using the affine
+    # transformation since Poisson should return integers. Instead we scale
+    # the parameters.
+    def distribution(
+        self,
+        distr_args,
+        loc: Optional[torch.Tensor] = None,
+        scale: Optional[torch.Tensor] = None,
+    ) -> Distribution:
+        (rate,) = distr_args
+
+        if scale is not None:
+            rate *= scale
+
+        return Poisson(rate=rate)
 
     @property
     def event_shape(self) -> Tuple:

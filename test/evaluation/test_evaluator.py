@@ -46,24 +46,6 @@ def fcst_iterator(fcst, start_dates):
         )
 
 
-def iterator(it):
-    """
-    Convenience function to toggle whether to consume dataset and forecasts as iterators or iterables.
-    :param it:
-    :return: it (as iterator)
-    """
-    return iter(it)
-
-
-def iterable(it):
-    """
-    Convenience function to toggle whether to consume dataset and forecasts as iterators or iterables.
-    :param it:
-    :return: it (as iterable)
-    """
-    return list(it)
-
-
 def naive_forecaster(ts, prediction_length, num_samples=100, target_dim=0):
     """
     :param ts: pandas.Series
@@ -92,7 +74,7 @@ def calculate_metrics(
     ts_datastructure,
     has_nans=False,
     forecaster=naive_forecaster,
-    input_type=iterator,
+    input_type=iter,
 ):
     num_timeseries = timeseries.shape[0]
     num_timestamps = timeseries.shape[1]
@@ -439,7 +421,7 @@ RES = [
 HAS_NANS = [False, False, True, False, True, True]
 
 
-INPUT_TYPE = [iterable, iterable, iterable, iterator, iterator, iterable]
+INPUT_TYPE = [list, list, list, iter, iter, list]
 
 
 @pytest.mark.parametrize(
@@ -448,7 +430,9 @@ INPUT_TYPE = [iterable, iterable, iterable, iterator, iterator, iterable]
 )
 def test_metrics(timeseries, res, has_nans, input_type):
     ts_datastructure = pd.Series
-    evaluator = Evaluator(quantiles=QUANTILES, num_workers=None)
+    evaluator = Evaluator(
+        quantiles=QUANTILES, num_workers=None, allow_nan_forecast=True
+    )
     agg_metrics, _ = calculate_metrics(
         timeseries,
         evaluator,
@@ -472,7 +456,9 @@ def test_metrics(timeseries, res, has_nans, input_type):
 def test_metrics_mp(timeseries, res, has_nans, input_type):
     ts_datastructure = pd.Series
     # Default will be multiprocessing evaluator
-    evaluator = Evaluator(quantiles=QUANTILES, num_workers=4)
+    evaluator = Evaluator(
+        quantiles=QUANTILES, num_workers=4, allow_nan_forecast=True
+    )
     agg_metrics, item_metrics = calculate_metrics(
         timeseries,
         evaluator,
@@ -615,7 +601,7 @@ HAS_NANS_MULTIVARIATE = [False, False, False, False, False, False]
 
 EVAL_DIMS = [[0], [1], [0, 1], [0], [1], None]
 
-INPUT_TYPE = [iterable, iterable, iterator, iterator, iterable, iterator]
+INPUT_TYPE = [list, list, iter, iter, list, iter]
 
 
 @pytest.mark.parametrize(
@@ -661,7 +647,7 @@ def test_evaluation_with_QuantileForecast():
     index = pd.period_range(start=start, freq="1D", periods=len(target))
     ts = pd.Series(index=index, data=target)
 
-    ev = Evaluator(quantiles=("0.1", "0.2", "0.5"))
+    ev = Evaluator(quantiles=("0.1", "0.2", "0.5"), allow_nan_forecast=True)
 
     fcst = [
         QuantileForecast(
@@ -853,14 +839,14 @@ FCST_TYPES = ["mean"] * 8
 HAS_NANS = [False, False, True, False, False, True, True, True]
 
 INPUT_TYPE = [
-    iterable,
-    iterable,
-    iterable,
-    iterator,
-    iterator,
-    iterator,
-    iterator,
-    iterable,
+    list,
+    list,
+    list,
+    iter,
+    iter,
+    iter,
+    iter,
+    list,
 ]
 
 
@@ -891,6 +877,7 @@ def test_custom_eval_fn(
     evaluator = Evaluator(
         quantiles=QUANTILES,
         custom_eval_fn={eval_name: [eval_fn, agg_str, fcst_type]},
+        allow_nan_forecast=True,
     )
 
     agg_metrics, item_metrics = calculate_metrics(
@@ -1045,7 +1032,7 @@ HAS_NANS_MULTIVARIATE = [False, False, False, False, False, False]
 
 EVAL_DIMS = [[0], [1], [0, 1], [0], [1], None]
 
-INPUT_TYPE = [iterable, iterable, iterator, iterator, iterable, iterator]
+INPUT_TYPE = [list, list, iter, iter, list, iter]
 
 CALLABLES = [rmsle] * 6
 METRIC_NAMES = ["RMSLE"] * 6

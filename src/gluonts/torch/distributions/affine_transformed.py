@@ -12,9 +12,9 @@
 # permissions and limitations under the License.
 
 from torch.distributions import (
-    TransformedDistribution,
     AffineTransform,
     Distribution,
+    TransformedDistribution,
 )
 
 
@@ -36,7 +36,6 @@ class AffineTransformed(TransformedDistribution):
     """
 
     def __init__(self, base_distribution: Distribution, loc=None, scale=None):
-
         self.scale = 1.0 if scale is None else scale
         self.loc = 0.0 if loc is None else loc
 

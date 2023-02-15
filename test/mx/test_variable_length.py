@@ -13,17 +13,15 @@
 
 import itertools
 from functools import partial
-from typing import Any, Dict, Iterable
+from typing import Iterable
 
-import mxnet as mx
 import numpy as np
 from pandas.tseries.frequencies import to_offset
 import pytest
 
-from gluonts.dataset.common import Dataset, ListDataset
+from gluonts.dataset.common import Dataset
 from gluonts.dataset.loader import (
     DataBatch,
-    DataLoader,
     InferenceDataLoader,
     TrainDataLoader,
 )
@@ -47,7 +45,6 @@ def loader_factory():
         is_train: bool = True,
         override_args: dict = None,
     ) -> Iterable[DataBatch]:
-
         if override_args is None:
             override_args = {}
 

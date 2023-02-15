@@ -31,6 +31,9 @@ from gluonts.itertools import (
     rows_to_columns,
     columns_to_rows,
     select,
+    Map,
+    StarMap,
+    Filter,
 )
 
 
@@ -130,3 +133,27 @@ def test_select():
 
     with pytest.raises(KeyError):
         select("abd", d, ignore_missing=False) == {"a": 1, "b": 2}
+
+
+def test_map():
+    data = [1, 2, 3]
+    applied = Map(lambda n: n + 1, data)
+
+    assert list(applied) == [2, 3, 4]
+
+
+def test_starmap():
+    def add(a, b, c):
+        return a + b + c
+
+    data = [[1, 2, 3], [4, 5, 6]]
+    applied = StarMap(add, data)
+
+    assert list(applied) == [add(1, 2, 3), add(4, 5, 6)]
+
+
+def test_filter():
+    data = [1, 2, 3]
+    applied = Filter(lambda n: n <= 2, data)
+
+    assert list(applied) == [1, 2]

@@ -12,7 +12,9 @@
 # permissions and limitations under the License.
 
 import itertools
+import math
 import random
+from dataclasses import dataclass, field
 from typing import (
     Callable,
     Dict,
@@ -24,7 +26,6 @@ from typing import (
     Sequence,
     Tuple,
 )
-from dataclasses import dataclass, field
 
 from typing_extensions import Protocol, runtime_checkable
 
@@ -39,6 +40,10 @@ class SizedIterable(Protocol):
 
 
 T = TypeVar("T")
+
+# key / value
+K = TypeVar("K")
+V = TypeVar("V")
 
 
 def maybe_len(obj) -> Optional[int]:
@@ -74,6 +79,27 @@ class Cyclic:
                 yield el
             if not at_least_one:
                 break
+
+    def stream(self):
+        """
+        Return a continuous stream of self that has no fixed start.
+
+        When re-iterating ``Cyclic`` it will yield elements from the start of
+        the passed ``iterable``. However, this is not always desired; e.g. in
+        training we want to treat training data as an infinite stream of
+        values and not start at the beginning of the dataset for each epoch.
+
+        >>> from toolz import take
+        >>> c = Cyclic([1, 2, 3, 4])
+        >>> assert list(take(5, c)) == [1, 2, 3, 4, 1]
+        >>> assert list(take(5, c)) == [1, 2, 3, 4, 1]
+
+        >>> s = Cyclic([1, 2, 3, 4]).stream()
+        >>> assert list(take(5, s)) == [1, 2, 3, 4, 1]
+        >>> assert list(take(5, s)) == [2, 3, 4, 1, 2]
+
+        """
+        return iter(self)
 
     def __len__(self) -> int:
         return len(self.iterable)
@@ -176,10 +202,10 @@ class IterableSlice:
         yield from itertools.islice(self.iterable, self.length)
 
 
+@dataclass
 class Map:
-    def __init__(self, fn, iterable: SizedIterable):
-        self.fn = fn
-        self.iterable = iterable
+    fn: Callable
+    iterable: SizedIterable
 
     def __iter__(self):
         return map(self.fn, self.iterable)
@@ -187,12 +213,26 @@ class Map:
     def __len__(self):
         return len(self.iterable)
 
-    def __repr__(self):
-        return f"Map(data={self.iterable!r})"
+
+@dataclass
+class StarMap:
+    fn: Callable
+    iterable: SizedIterable
+
+    def __iter__(self):
+        return itertools.starmap(self.fn, self.iterable)
+
+    def __len__(self):
+        return len(self.iterable)
 
 
-K = TypeVar("K")
-V = TypeVar("V")
+@dataclass
+class Filter:
+    fn: Callable
+    iterable: SizedIterable
+
+    def __iter__(self):
+        return filter(self.fn, self.iterable)
 
 
 def rows_to_columns(
@@ -281,12 +321,12 @@ def partition(
 
 
 def select(keys, source: dict, ignore_missing: bool = False) -> dict:
-    """Select subset of `source` dictionaries.
+    """
+    Select subset of `source` dictionaries.
 
     >>> d = {"a": 1, "b": 2, "c": 3}
     >>> select(["a", "b"], d)
     {'a': 1, 'b': 2}
-
     """
 
     result = {}
@@ -299,3 +339,35 @@ def select(keys, source: dict, ignore_missing: bool = False) -> dict:
                 raise
 
     return result
+
+
+def trim_nans(xs, trim="fb"):
+    """
+    Trim the leading and/or trailing `NaNs` from a 1-D array or sequence.
+
+    Like ``np.trim_zeros`` but for `NaNs`.
+    """
+
+    trim = trim.lower()
+
+    start = None
+    end = None
+
+    if "f" in trim:
+        for start, val in enumerate(xs):
+            if not math.isnan(val):
+                break
+
+    if "b" in trim:
+        for end in range(len(xs), -1, -1):
+            if not math.isnan(xs[end - 1]):
+                break
+
+    return xs[start:end]
+
+
+def inverse(dct: Dict[K, V]) -> Dict[V, K]:
+    """
+    Inverse a dictionary; keys become values and values become keys.
+    """
+    return {value: key for key, value in dct.items()}

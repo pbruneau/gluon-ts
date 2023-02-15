@@ -18,7 +18,7 @@ import pytest
 from gluonts.model.forecast import (
     QuantileForecast,
     SampleForecast,
-    LinearInterpolation,
+    _linear_interpolation,
     ExponentialTailApproximation,
 )
 
@@ -35,6 +35,18 @@ FORECASTS = {
     ),
     "SampleForecast": SampleForecast(
         samples=SAMPLES,
+        start_date=START_DATE,
+    ),
+}
+
+MULTIVARIATE_FORECASTS = {
+    "SampleForecast": SampleForecast(
+        samples=np.arange(160).reshape(8, 5, 4) / 100,
+        start_date=START_DATE,
+    ),
+    "QuantileForecast": QuantileForecast(
+        forecast_arrays=np.random.normal(size=(np.size(QUANTILES), 7, 3)),
+        forecast_keys=np.array(QUANTILES, str),
         start_date=START_DATE,
     ),
 }
@@ -101,6 +113,29 @@ def test_forecast_multivariate(forecast, exp_index):
     assert np.all(forecast.index == exp_index)
 
 
+@pytest.mark.parametrize("name", MULTIVARIATE_FORECASTS.keys())
+def test_copy_dim(name):
+    forecast = MULTIVARIATE_FORECASTS[name]
+    for dim in range(forecast.dim()):
+        univariate_forecast = forecast.copy_dim(dim)
+
+        assert univariate_forecast.dim() == 1
+        assert univariate_forecast.start_date == forecast.start_date
+        assert univariate_forecast.item_id == forecast.item_id
+        assert univariate_forecast.info == forecast.info
+
+        if name == "SampleForecast":
+            assert np.array_equal(
+                univariate_forecast.samples,
+                MULTIVARIATE_FORECASTS[name].samples[:, :, dim],
+            )
+        else:
+            assert np.array_equal(
+                univariate_forecast.forecast_array,
+                MULTIVARIATE_FORECASTS[name].forecast_array[:, :, dim],
+            )
+
+
 def test_linear_interpolation() -> None:
     tol = 1e-7
     x_coord = [0.1, 0.5, 0.9]
@@ -109,12 +144,14 @@ def test_linear_interpolation() -> None:
         np.array([1.0, 2.0, 3.0]),
         np.array([0.25, 0.5, 0.9]),
     ]
-    linear_interpolation = LinearInterpolation(x_coord, y_coord)
+
     x = 0.75
     exact = y_coord[1] + (x - x_coord[1]) * (y_coord[2] - y_coord[1]) / (
         x_coord[2] - x_coord[1]
     )
-    assert np.all(np.abs(exact - linear_interpolation(x)) <= tol)
+    assert np.all(
+        np.abs(exact - _linear_interpolation(x_coord, y_coord, x)) <= tol
+    )
 
 
 def test_exponential_left_tail_approximation() -> None:

@@ -40,6 +40,10 @@ class MQCNNEstimator(ForkingSeq2SeqEstimator):
     encoder and a multi-quantile MLP as a decoder. Implements the MQ-CNN
     Forecaster, proposed in [WTN+17]_.
 
+    Note that MQCNN uses ValidationSplitSampler as its default
+    train_sampler. If context_length is less than the length of the input
+    time series, only one example will be used for training.
+
     Parameters
     ----------
     freq
@@ -136,6 +140,10 @@ class MQCNNEstimator(ForkingSeq2SeqEstimator):
         Determines whether to use IQF or QF. (default: True).
     batch_size
         The size of the batches to be used training and prediction.
+    train_sampler
+        Controls the sampling of windows during training.
+    validation_sampler
+        Controls the sampling of windows during validation.
     """
 
     @validated()
@@ -169,8 +177,9 @@ class MQCNNEstimator(ForkingSeq2SeqEstimator):
         max_ts_len: Optional[int] = None,
         is_iqf: bool = True,
         batch_size: int = 32,
+        train_sampler: Optional[InstanceSampler] = None,
+        validation_sampler: Optional[InstanceSampler] = None,
     ) -> None:
-
         assert (distr_output is None) or (quantiles is None)
         assert (
             prediction_length > 0
@@ -272,6 +281,8 @@ class MQCNNEstimator(ForkingSeq2SeqEstimator):
             scaling_decoder_dynamic_feature=scaling_decoder_dynamic_feature,
             num_forking=num_forking,
             max_ts_len=max_ts_len,
+            train_sampler=train_sampler,
+            validation_sampler=validation_sampler,
             batch_size=batch_size,
         )
 
@@ -344,6 +355,10 @@ class MQRNNEstimator(ForkingSeq2SeqEstimator):
     encoder and a multi-quantile MLP as a decoder.
 
     Implements the MQ-RNN Forecaster, proposed in [WTN+17]_.
+
+    Note that MQRNN uses ValidationSplitSampler as its default
+    train_sampler. If context_length is less than the length of the input
+    time series, only one example will be used for training.
     """
 
     @validated()
@@ -361,8 +376,9 @@ class MQRNNEstimator(ForkingSeq2SeqEstimator):
         num_forking: Optional[int] = None,
         is_iqf: bool = True,
         batch_size: int = 32,
+        train_sampler: Optional[InstanceSampler] = None,
+        validation_sampler: Optional[InstanceSampler] = None,
     ) -> None:
-
         assert (
             prediction_length > 0
         ), f"Invalid prediction length: {prediction_length}."
@@ -421,5 +437,7 @@ class MQRNNEstimator(ForkingSeq2SeqEstimator):
             scaling=scaling,
             scaling_decoder_dynamic_feature=scaling_decoder_dynamic_feature,
             num_forking=num_forking,
+            train_sampler=train_sampler,
+            validation_sampler=validation_sampler,
             batch_size=batch_size,
         )
