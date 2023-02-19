@@ -154,14 +154,14 @@ class PyTorchLightningEstimator(Estimator):
         **kwargs,
     ) -> TrainOutput:
         transformation = self.create_transformation()
-
+        
         with env._let(max_idle_transforms=max(len(training_data), 100)):
             transformed_training_data = transformation.apply(
                 training_data, is_train=True
             )
             if cache_data:
                 transformed_training_data = Cached(transformed_training_data)
-
+                  
             training_network = self.create_lightning_module()
 
             training_data_loader = self.create_training_data_loader(
@@ -169,7 +169,7 @@ class PyTorchLightningEstimator(Estimator):
                 training_network,
                 shuffle_buffer_length=shuffle_buffer_length,
             )
-
+                                    
         validation_data_loader = None
 
         if validation_data is not None:
