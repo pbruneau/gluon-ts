@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 from textwrap import dedent
+from pprint import pprint
 
 # Third-party imports
 from setuptools import find_namespace_packages, setup
@@ -204,11 +205,18 @@ shell_require = find_requirements("requirements-extras-shell.txt")
 mxnet_require = find_requirements("requirements-mxnet.txt")
 torch_require = find_requirements("requirements-pytorch.txt")
 
+
+
+#dev_require = (
+#    arrow_require
+#    + docs_require
+#    + tests_require
+#    + shell_require
+#    + sagemaker_api_require
+#)
+
 dev_require = (
-    arrow_require
-    + docs_require
-    + tests_require
-    + shell_require
+    tests_require
     + sagemaker_api_require
 )
 
@@ -237,13 +245,13 @@ setup_kwargs: dict = dict(
     install_requires=find_requirements("requirements.txt"),
     tests_require=tests_require,
     extras_require={
-        "arrow": arrow_require,
+        #"arrow": arrow_require,
         "dev": dev_require,
         "docs": docs_require,
         "mxnet": mxnet_require,
-        "R": find_requirements("requirements-extras-r.txt"),
+        #"R": find_requirements("requirements-extras-r.txt"),
         "Prophet": find_requirements("requirements-extras-prophet.txt"),
-        "pro": arrow_require + ["orjson"],
+        #"pro": arrow_require + ["orjson"],
         "shell": shell_require,
         "torch": torch_require,
     },
