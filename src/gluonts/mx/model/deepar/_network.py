@@ -13,9 +13,6 @@
 
 from typing import List, Optional, Tuple, Union, Type
 
-# PBR
-import pdb
-
 import mxnet as mx
 import numpy as np
 from mxnet.gluon.contrib.rnn import VariationalDropoutCell
@@ -564,9 +561,6 @@ class DeepARNetwork(mx.gluon.HybridBlock):
                 axis=1, begin=-self.context_length, end=None
             ),
         )
-
-        # PBR
-        # inspect here what happens
         
         # (batch_size, num_features)
         embedded_cat = self.embedder(feat_static_cat)
@@ -660,6 +654,8 @@ class DeepARNetwork(mx.gluon.HybridBlock):
         and a vector of static features that was constructed and fed as input
         to the encoder. All tensor arguments should have NTC layout.
         """
+        # PBR
+        #print("passed here")
 
         if future_time_feat is None or future_target is None:
             time_feat = past_time_feat.slice_axis(
@@ -927,7 +923,7 @@ class DeepARTrainingNetwork(DeepARNetwork):
         # since return_rnn_outputs=True, assert:
         assert isinstance(outputs, tuple)
         distr, rnn_outputs = outputs
-
+                
         # put together target sequence
         # (batch_size, seq_len, *target_shape)
         target = F.concat(
@@ -1168,6 +1164,10 @@ class DeepARPredictionNetwork(DeepARNetwork):
             future_time_feat=None,
             future_target=None,
         )
+        
+        # PBR
+        print([item.sum() for item in state])
+        
         return self.sampling_decoder(
             F=F,
             past_target=imputed_sequence,
