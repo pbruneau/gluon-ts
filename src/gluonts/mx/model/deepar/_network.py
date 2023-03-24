@@ -654,8 +654,6 @@ class DeepARNetwork(mx.gluon.HybridBlock):
         and a vector of static features that was constructed and fed as input
         to the encoder. All tensor arguments should have NTC layout.
         """
-        # PBR
-        #print("passed here")
 
         if future_time_feat is None or future_target is None:
             time_feat = past_time_feat.slice_axis(
@@ -1164,10 +1162,7 @@ class DeepARPredictionNetwork(DeepARNetwork):
             future_time_feat=None,
             future_target=None,
         )
-        
-        # PBR
-        print([item.sum() for item in state])
-        
+                
         return self.sampling_decoder(
             F=F,
             past_target=imputed_sequence,
