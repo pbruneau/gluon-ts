@@ -131,7 +131,9 @@ class QuantileForecastGenerator(ForecastGenerator):
                     item_id=batch[FieldName.ITEM_ID][i]
                     if FieldName.ITEM_ID in batch
                     else None,
-                    info=batch["info"][i] if "info" in batch else None,
+                    # PBR ignoring otherwise causes PydanticModel to crash
+                    # info=batch["info"][i] if "info" in batch else None,
+                    info=None,
                     forecast_keys=self.quantiles,
                 )
             assert i + 1 == len(batch[FieldName.FORECAST_START])
@@ -178,7 +180,9 @@ class SampleForecastGenerator(ForecastGenerator):
                     item_id=batch[FieldName.ITEM_ID][i]
                     if FieldName.ITEM_ID in batch
                     else None,
-                    info=batch["info"][i] if "info" in batch else None,
+                    # PBR ignoring otherwise causes PydanticModel to crash
+                    # info=batch["info"][i] if "info" in batch else None,
+                    info=None,
                 )
             assert i + 1 == len(batch[FieldName.FORECAST_START])
 
@@ -218,6 +222,8 @@ class DistributionForecastGenerator(ForecastGenerator):
                     item_id=batch[FieldName.ITEM_ID][i]
                     if FieldName.ITEM_ID in batch
                     else None,
-                    info=batch["info"][i] if "info" in batch else None,
+                    # PBR ignoring otherwise causes PydanticModel to crash
+                    # info=batch["info"][i] if "info" in batch else None,
+                    info=None,
                 )
             assert i + 1 == len(batch[FieldName.FORECAST_START])
