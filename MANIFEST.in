@@ -8,7 +8,6 @@ graft docs
 graft requirements
 graft test
 
-includes *.md
 include NOTICE
 
 prune .devtools
@@ -20,3 +19,6 @@ prune evaluations
 exclude .dockerignore
 exclude .gitignore
 exclude dev_setup.sh
+
+global-exclude */__pycache__/*
+global-exclude *.pyc

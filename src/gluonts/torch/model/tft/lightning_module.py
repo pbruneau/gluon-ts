@@ -15,6 +15,7 @@ import pytorch_lightning as pl
 import torch
 from gluonts.core.component import validated
 from gluonts.itertools import select
+from gluonts.torch.model.lightning_util import has_validation_loop
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from .module import TemporalFusionTransformerModel
@@ -30,36 +31,32 @@ class TemporalFusionTransformerLightningModule(pl.LightningModule):
 
     Parameters
     ----------
-    model
-        ``TemporalFusionTransformerModel`` to be trained.
+    model_kwargs
+        Keyword arguments to construct the ``TemporalFusionTransformerModel`` to be trained.
     lr
-        Learning rate, default: ``1e-3``.
+        Learning rate.
     weight_decay
-        Weight decay regularization parameter, default: ``1e-8``.
+        Weight decay regularization parameter.
     patience
-        Patience parameter for learning rate scheduler, default: ``10``.
+        Patience parameter for learning rate scheduler.
     """
 
     @validated()
     def __init__(
         self,
-        model: TemporalFusionTransformerModel,
+        model_kwargs: dict,
         lr: float = 1e-3,
         patience: int = 10,
         weight_decay: float = 0.0,
     ):
         super().__init__()
         self.save_hyperparameters()
-        self.model = model
+        self.model = TemporalFusionTransformerModel(**model_kwargs)
         self.lr = lr
         self.patience = patience
         self.weight_decay = weight_decay
-        self.example_input_array = tuple(
-            [
-                torch.zeros(shape, dtype=self.model.input_types()[name])
-                for (name, shape) in self.model.input_shapes().items()
-            ]
-        )
+        self.inputs = self.model.describe_inputs()
+        self.example_input_array = self.inputs.zeros()
 
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
@@ -69,7 +66,7 @@ class TemporalFusionTransformerLightningModule(pl.LightningModule):
         Execute training step.
         """
         train_loss = self.model.loss(
-            **select(self.model.input_shapes(), batch, ignore_missing=True),
+            **select(self.inputs, batch, ignore_missing=True),
             future_observed_values=batch["future_observed_values"],
             future_target=batch["future_target"],
         ).mean()
@@ -89,7 +86,7 @@ class TemporalFusionTransformerLightningModule(pl.LightningModule):
         Execute validation step.
         """
         val_loss = self.model.loss(
-            **select(self.model.input_shapes(), batch, ignore_missing=True),
+            **select(self.inputs, batch, ignore_missing=True),
             future_observed_values=batch["future_observed_values"],
             future_target=batch["future_target"],
         ).mean()
@@ -114,9 +111,7 @@ class TemporalFusionTransformerLightningModule(pl.LightningModule):
             weight_decay=self.weight_decay,
         )
         monitor = (
-            "val_loss"
-            if self.trainer._data_connector._val_dataloader_source.is_defined()
-            else "train_loss"
+            "val_loss" if has_validation_loop(self.trainer) else "train_loss"
         )
 
         return {

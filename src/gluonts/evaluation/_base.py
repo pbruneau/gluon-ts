@@ -35,6 +35,7 @@ import pandas as pd
 
 from gluonts.gluonts_tqdm import tqdm
 from gluonts.model.forecast import Forecast, Quantile
+from gluonts.time_feature import get_seasonality
 
 from .metrics import (
     abs_error,
@@ -48,6 +49,7 @@ from .metrics import (
     msis,
     quantile_loss,
     smape,
+    num_masked_values,
 )
 
 
@@ -365,6 +367,30 @@ class Evaluator:
             np.squeeze(time_series.loc[:date_before_forecast].transpose())
         )
 
+    def get_base_metrics(
+        self,
+        forecast: Forecast,
+        pred_target,
+        mean_fcst,
+        median_fcst,
+        seasonal_error,
+    ) -> Dict[str, Union[float, str, None]]:
+        return {
+            "item_id": forecast.item_id,
+            "forecast_start": forecast.start_date,
+            "MSE": mse(pred_target, mean_fcst)
+            if mean_fcst is not None
+            else None,
+            "abs_error": abs_error(pred_target, median_fcst),
+            "abs_target_sum": abs_target_sum(pred_target),
+            "abs_target_mean": abs_target_mean(pred_target),
+            "seasonal_error": seasonal_error,
+            "MASE": mase(pred_target, median_fcst, seasonal_error),
+            "MAPE": mape(pred_target, median_fcst),
+            "sMAPE": smape(pred_target, median_fcst),
+            "num_masked_target_values": num_masked_values(pred_target),
+        }
+
     def get_metrics_per_ts(
         self, time_series: Union[pd.Series, pd.DataFrame], forecast: Forecast
     ) -> Mapping[str, Union[float, str, None, np.ma.core.MaskedConstant]]:
@@ -393,20 +419,9 @@ class Evaluator:
             past_data, forecast.start_date.freqstr, self.seasonality
         )
 
-        metrics: Dict[str, Union[float, str, None]] = {
-            "item_id": forecast.item_id,
-            "forecast_start": forecast.start_date,
-            "MSE": mse(pred_target, mean_fcst)
-            if mean_fcst is not None
-            else None,
-            "abs_error": abs_error(pred_target, median_fcst),
-            "abs_target_sum": abs_target_sum(pred_target),
-            "abs_target_mean": abs_target_mean(pred_target),
-            "seasonal_error": seasonal_error,
-            "MASE": mase(pred_target, median_fcst, seasonal_error),
-            "MAPE": mape(pred_target, median_fcst),
-            "sMAPE": smape(pred_target, median_fcst),
-        }
+        metrics: Dict[str, Union[float, str, None]] = self.get_base_metrics(
+            forecast, pred_target, mean_fcst, median_fcst, seasonal_error
+        )
         metrics["ND"] = cast(float, metrics["abs_error"]) / cast(
             float, metrics["abs_target_sum"]
         )
@@ -453,7 +468,9 @@ class Evaluator:
             from gluonts.ext.naive_2 import naive_2
 
             naive_median_forecast = naive_2(
-                past_data, len(pred_target), freq=forecast.start_date.freqstr
+                past_data,
+                len(pred_target),
+                season_length=get_seasonality(forecast.start_date.freqstr),
             )
             metrics["sMAPE_naive2"] = smape(pred_target, naive_median_forecast)
             metrics["MASE_naive2"] = mase(
@@ -486,6 +503,7 @@ class Evaluator:
             "MAPE": "mean",
             "sMAPE": "mean",
             "MSIS": "mean",
+            "num_masked_target_values": "sum",
         }
         if self.calculate_owa:
             agg_funs["sMAPE_naive2"] = "mean"
@@ -563,15 +581,14 @@ class Evaluator:
 
 class MultivariateEvaluator(Evaluator):
     """
-    The MultivariateEvaluator class owns functionality for evaluating
-    multidimensional target arrays of shape (target_dimensionality,
-    prediction_length).
+    The MultivariateEvaluator class evaluates forecasts for multivariate or
+    multi-dimensional observations.
 
     Evaluations of individual dimensions will be stored with the corresponding
-    dimension prefix and contain the metrics calculated by only this dimension.
+    dimension prefix and contain metrics calculated only for this dimension.
     Metrics with the plain metric name correspond to metrics calculated over
     all dimensions.
-    Additionally, the user can provide additional aggregation functions that
+    Additionally, the user can provide custom aggregation functions that
     first aggregate the target and forecast over dimensions and then calculate
     the metric. These metrics will be prefixed with m_<aggregation_fun_name>_
 
@@ -750,6 +767,22 @@ class MultivariateEvaluator(Evaluator):
         fcst_iterator: Iterable[Forecast],
         num_series=None,
     ) -> Tuple[Dict[str, float], pd.DataFrame]:
+        """Compute accuracy metrics for multivariate forecasts.
+
+        Parameters
+        ----------
+        ts_iterator
+            iterator over target time series. Each element of the iterator
+            must be a DataFrame with columns representing individual dimensions
+            of the multivariate time series and timestamps as index.
+        fcst_iterator
+            iterator over `Forecast` objects.
+
+        Returns
+        -------
+            Dict[str, float]
+                dictionary of forecast accuracy metrics.
+        """
         ts_iterator = iter(ts_iterator)
         fcst_iterator = iter(fcst_iterator)
 

@@ -58,7 +58,7 @@ class CategoricalFeatureInfo(pydantic.BaseModel):
 
 
 class MetaData(pydantic.BaseModel):
-    freq: str = pydantic.Field(..., alias="time_granularity")  # type: ignore
+    freq: str
     target: Optional[BasicFeatureInfo] = None
 
     feat_static_cat: List[CategoricalFeatureInfo] = []
@@ -134,14 +134,19 @@ def infer_file_type(path):
     return None
 
 
-def _glob(path: Path, pattern="*", levels=1):
+def _rglob(path: Path, pattern="*", levels=1):
+    """Like ``path.rglob(pattern)`` except this limits the number of sub
+    directories that are traversed. ``levels = 0`` is thus the same as
+    ``path.glob(pattern)``.
+
+    """
     if levels is not None:
         levels -= 1
 
-    for subpath in path.glob(pattern):
+    for subpath in path.iterdir():
         if subpath.is_dir():
-            if levels != 0:
-                yield from _glob(subpath, pattern, levels)
+            if levels is None or levels >= 0:
+                yield from _rglob(subpath, pattern, levels)
         else:
             yield subpath
 
@@ -153,10 +158,10 @@ def FileDataset(
     cache: bool = False,
     use_timestamp: bool = False,
     loader_class=None,
-    ignore=False,
     pattern="*",
-    levels=1,
+    levels=2,
     translate=None,
+    ignore_hidden=True,
 ) -> Dataset:
     path = Path(path)
 
@@ -164,42 +169,42 @@ def FileDataset(
         raise FileNotFoundError(path)
 
     if path.is_dir():
-        subpaths = _glob(path, pattern, levels)
-
-        datasets = [
-            FileDataset(
-                subpath,
-                freq,
-                one_dim_target,
-                cache,
-                use_timestamp,
-                loader_class=loader_class,
-                ignore=True,
-            )
-            for subpath in subpaths
-        ]
-
-        return DatasetCollection(
-            [dataset for dataset in datasets if dataset is not None]
-        )
-
-    assert path.is_file()
-
-    if loader_class is None:
-        loader = infer_file_type(path)
-        if loader is None:
-            message = f"Cannot infer loader for {path}."
-            if ignore:
-                logging.warning(message)
-                return None  # type: ignore
-
-            raise ValueError(message)
+        paths = _rglob(path, pattern, levels)
     else:
-        loader = loader_class(path)
+        assert path.is_file()
+        paths = [path]
 
-    return _FileDataset(
-        loader, freq, one_dim_target, cache, use_timestamp, translate
+    if ignore_hidden:
+        paths = [path for path in paths if not path.name.startswith(".")]
+
+    loaders = []
+    for subpath in paths:
+        if loader_class is None:
+            loader = infer_file_type(subpath)
+            if loader is None:
+                logging.warn(f"Cannot infer loader for {subpath}.")
+                continue
+        else:
+            loader = loader_class(subpath)
+
+        loaders.append(loader)
+
+    assert (
+        loaders
+    ), f"Cannot find any loadable data in '{path}' using pattern {pattern!r}"
+
+    file_dataset = functools.partial(
+        _FileDataset,
+        freq=freq,
+        one_dim_target=one_dim_target,
+        cache=cache,
+        use_timestamp=use_timestamp,
+        translate=translate,
     )
+    if len(loaders) == 1:
+        return file_dataset(loaders[0])
+    else:
+        return DatasetCollection(list(map(file_dataset, loaders)))
 
 
 def _FileDataset(

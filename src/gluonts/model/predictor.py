@@ -11,7 +11,6 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-import functools
 import itertools
 import json
 import logging
@@ -21,16 +20,15 @@ import traceback
 from pathlib import Path
 from pydoc import locate
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Callable, Iterator, Optional, Type
+from typing import TYPE_CHECKING, Callable, Iterator, Optional
 
 import numpy as np
 
 import gluonts
 from gluonts.core import fqname_for
-from gluonts.core.component import equals, from_hyperparameters, validated
+from gluonts.core.component import equals, from_hyperparameters
 from gluonts.core.serde import dump_json, load_json
 from gluonts.dataset.common import DataEntry, Dataset
-from gluonts.exceptions import GluonTSException
 from gluonts.model.forecast import Forecast
 
 if TYPE_CHECKING:  # avoid circular import
@@ -137,22 +135,17 @@ class Predictor:
 
 class RepresentablePredictor(Predictor):
     """
-    An abstract predictor that can be subclassed by models that are not based
-    on Gluon. Subclasses should have @validated() constructors.
-    (De)serialization and value equality are all implemented on top of the.
+    An abstract predictor that can be subclassed by framework-specific models.
+    Subclasses should have ``@validated()`` constructors:
+    (de)serialization and equality test are all implemented on top of its logic.
 
-    @validated() logic.
     Parameters
     ----------
     prediction_length
         Prediction horizon.
+    lead_time
+        Prediction lead time.
     """
-
-    @validated()
-    def __init__(self, prediction_length: int, lead_time: int = 0) -> None:
-        super().__init__(
-            lead_time=lead_time, prediction_length=prediction_length
-        )
 
     def predict(self, dataset: Dataset, **kwargs) -> Iterator[Forecast]:
         for item in dataset:
@@ -169,7 +162,6 @@ class RepresentablePredictor(Predictor):
         return equals(self, that)
 
     def serialize(self, path: Path) -> None:
-        # call Predictor.serialize() in order to serialize the class name
         super().serialize(path)
         with (path / "predictor.json").open("w") as fp:
             print(dump_json(self), file=fp)
@@ -378,35 +370,3 @@ class Localizer(Predictor):
             trained_pred = self.estimator.train([ts])
             logger.info(f"predicting for time series {i} / {len(dataset)}")
             yield from trained_pred.predict([ts], **kwargs)
-
-
-class FallbackPredictor(Predictor):
-    @classmethod
-    def from_predictor(
-        cls, base: RepresentablePredictor, **overrides
-    ) -> Predictor:
-        # Create predictor based on an existing predictor.
-        # This let's us create a MeanPredictor as a fallback on the fly.
-        return cls.from_hyperparameters(
-            **getattr(base, "__init_args__"), **overrides
-        )
-
-
-def fallback(fallback_cls: Type[FallbackPredictor]):
-    def decorator(predict_item):
-        @functools.wraps(predict_item)
-        def fallback_predict(self, item: DataEntry) -> Forecast:
-            try:
-                return predict_item(self, item)
-            except GluonTSException:
-                raise
-            except Exception:
-                logging.warning(
-                    f"Base predictor failed with: {traceback.format_exc()}"
-                )
-                fallback_predictor = fallback_cls.from_predictor(self)
-                return fallback_predictor.predict_item(item)
-
-        return fallback_predict
-
-    return decorator

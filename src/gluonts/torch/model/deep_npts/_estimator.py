@@ -17,6 +17,7 @@ from functools import partial
 
 import torch
 
+from gluonts.core.component import validated
 from gluonts.dataset.common import Dataset
 from gluonts.dataset.field_names import FieldName
 from gluonts.dataset.loader import DataLoader, TrainDataLoader
@@ -34,6 +35,7 @@ from gluonts.transform import (
     InstanceSplitter,
     ExpectedNumInstanceSampler,
     RemoveFields,
+    SelectFields,
     SetField,
     TestSplitSampler,
     Transformation,
@@ -116,6 +118,7 @@ class DeepNPTSEstimator(Estimator):
         `DeepNPTSNetworkSmooth` (default: DeepNPTSNetworkDiscrete)
     """
 
+    @validated()
     def __init__(
         self,
         freq: str,
@@ -314,11 +317,19 @@ class DeepNPTSEstimator(Estimator):
             min_future=1,
         )
 
+        transform = self.instance_splitter(
+            instance_sampler, is_train=True
+        ) + SelectFields(
+            self.features_fields
+            + self.prediction_features_field
+            + [self.target_field]
+        )
+
         return TrainDataLoader(
             training_dataset,
             batch_size=batch_size,
             stack_fn=batchify,
-            transform=self.instance_splitter(instance_sampler, is_train=True),
+            transform=transform,
             num_batches_per_epoch=num_batches_per_epoch,
         )
 
@@ -388,7 +399,7 @@ class DeepNPTSEstimator(Estimator):
         return best_net
 
     def get_predictor(
-        self, net: torch.nn.Module, device=torch.device("cpu")
+        self, net: torch.nn.Module, device="cpu"
     ) -> PyTorchPredictor:
         pred_net_multi_step = DeepNPTSMultiStepNetwork(
             net=net, prediction_length=self.prediction_length

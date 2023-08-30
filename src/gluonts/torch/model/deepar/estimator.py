@@ -45,13 +45,9 @@ from gluonts.transform import (
 )
 from gluonts.torch.model.estimator import PyTorchLightningEstimator
 from gluonts.torch.model.predictor import PyTorchPredictor
-from gluonts.torch.distributions import (
-    DistributionOutput,
-    StudentTOutput,
-)
+from gluonts.torch.distributions import DistributionOutput, StudentTOutput
 from gluonts.transform.sampler import InstanceSampler
 
-from .module import DeepARModel
 from .lightning_module import DeepARLightningModule
 
 PREDICTION_INPUT_NAMES = [
@@ -148,6 +144,10 @@ class DeepAREstimator(PyTorchLightningEstimator):
         Controls the sampling of windows during training.
     validation_sampler
         Controls the sampling of windows during validation.
+    nonnegative_pred_samples
+        Should final prediction samples be non-negative? If yes, an activation
+        function is applied to ensure non-negative. Observe that this is applied
+        only to the final samples and this is not applied during training.
     """
 
     @validated()
@@ -170,7 +170,7 @@ class DeepAREstimator(PyTorchLightningEstimator):
         distr_output: DistributionOutput = StudentTOutput(),
         loss: DistributionLoss = NegativeLogLikelihood(),
         scaling: bool = True,
-        default_scale: float = 0.0,
+        default_scale: Optional[float] = None,
         lags_seq: Optional[List[int]] = None,
         time_features: Optional[List[TimeFeature]] = None,
         num_parallel_samples: int = 100,
@@ -180,6 +180,7 @@ class DeepAREstimator(PyTorchLightningEstimator):
         trainer_kwargs: Optional[Dict[str, Any]] = None,
         train_sampler: Optional[InstanceSampler] = None,
         validation_sampler: Optional[InstanceSampler] = None,
+        nonnegative_pred_samples: bool = False,
     ) -> None:
         default_trainer_kwargs = {
             "max_epochs": 100,
@@ -234,6 +235,7 @@ class DeepAREstimator(PyTorchLightningEstimator):
         self.validation_sampler = validation_sampler or ValidationSplitSampler(
             min_future=prediction_length
         )
+        self.nonnegative_pred_samples = nonnegative_pred_samples
 
     @classmethod
     def derive_auto_fields(cls, train_iter):
@@ -377,33 +379,32 @@ class DeepAREstimator(PyTorchLightningEstimator):
         )
 
     def create_lightning_module(self) -> DeepARLightningModule:
-        model = DeepARModel(
-            freq=self.freq,
-            context_length=self.context_length,
-            prediction_length=self.prediction_length,
-            num_feat_dynamic_real=(
-                1 + self.num_feat_dynamic_real + len(self.time_features)
-            ),
-            num_feat_static_real=max(1, self.num_feat_static_real),
-            num_feat_static_cat=max(1, self.num_feat_static_cat),
-            cardinality=self.cardinality,
-            embedding_dimension=self.embedding_dimension,
-            num_layers=self.num_layers,
-            hidden_size=self.hidden_size,
-            distr_output=self.distr_output,
-            dropout_rate=self.dropout_rate,
-            lags_seq=self.lags_seq,
-            scaling=self.scaling,
-            default_scale=self.default_scale,
-            num_parallel_samples=self.num_parallel_samples,
-        )
-
         return DeepARLightningModule(
-            model=model,
             loss=self.loss,
             lr=self.lr,
             weight_decay=self.weight_decay,
             patience=self.patience,
+            model_kwargs={
+                "freq": self.freq,
+                "context_length": self.context_length,
+                "prediction_length": self.prediction_length,
+                "num_feat_dynamic_real": (
+                    1 + self.num_feat_dynamic_real + len(self.time_features)
+                ),
+                "num_feat_static_real": max(1, self.num_feat_static_real),
+                "num_feat_static_cat": max(1, self.num_feat_static_cat),
+                "cardinality": self.cardinality,
+                "embedding_dimension": self.embedding_dimension,
+                "num_layers": self.num_layers,
+                "hidden_size": self.hidden_size,
+                "distr_output": self.distr_output,
+                "dropout_rate": self.dropout_rate,
+                "lags_seq": self.lags_seq,
+                "scaling": self.scaling,
+                "default_scale": self.default_scale,
+                "num_parallel_samples": self.num_parallel_samples,
+                "nonnegative_pred_samples": self.nonnegative_pred_samples,
+            },
         )
 
     def create_predictor(
@@ -419,7 +420,5 @@ class DeepAREstimator(PyTorchLightningEstimator):
             prediction_net=module,
             batch_size=self.batch_size,
             prediction_length=self.prediction_length,
-            device=torch.device(
-                "cuda" if torch.cuda.is_available() else "cpu"
-            ),
+            device="cuda" if torch.cuda.is_available() else "cpu",
         )

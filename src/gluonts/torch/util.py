@@ -120,7 +120,7 @@ def lagged_sequence_values(
     assert max(indices) <= prior_sequence.shape[dim], (
         f"lags cannot go further than prior sequence length, found lag"
         f" {max(indices)} while prior sequence is only"
-        f"{prior_sequence.shape[dim]}-long"
+        f" {prior_sequence.shape[dim]}-long"
     )
 
     full_sequence = torch.cat((prior_sequence, sequence), dim=dim)
@@ -186,6 +186,29 @@ def slice_along_dim(a: torch.Tensor, dim: int, slice_: slice) -> torch.Tensor:
     idx = [slice(None)] * len(a.shape)
     idx[dim] = slice_
     return a[idx]
+
+
+def take_last(a: torch.Tensor, dim: int, num: int) -> torch.Tensor:
+    """
+    Take last elements from a given tensor along a given dimension.
+
+    Parameters
+    ----------
+    a
+        Original tensor to slice.
+    dim
+        Dimension to slice over.
+    num
+        Number of trailing elements to retain (non-negative).
+
+    Returns
+    -------
+    torch.Tensor
+        A tensor with the same size as the input one, except dimension
+        ``dim`` which has length equal to ``num``.
+    """
+    assert num >= 0
+    return slice_along_dim(a, dim, slice(a.shape[dim] - num, None))
 
 
 def unsqueeze_expand(a: torch.Tensor, dim: int, size: int) -> torch.Tensor:

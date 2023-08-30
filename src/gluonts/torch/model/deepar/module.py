@@ -11,7 +11,7 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -22,15 +22,17 @@ from gluonts.torch.distributions import (
     DistributionOutput,
     StudentTOutput,
 )
-from gluonts.torch.modules.scaler import MeanScaler, NOPScaler
+from gluonts.torch.scaler import Scaler, MeanScaler, NOPScaler
 from gluonts.torch.modules.feature import FeatureEmbedder
 from gluonts.torch.modules.loss import DistributionLoss, NegativeLogLikelihood
 from gluonts.torch.util import (
     lagged_sequence_values,
     repeat_along_dim,
+    take_last,
     unsqueeze_expand,
 )
 from gluonts.itertools import prod
+from gluonts.model import Input, InputSpec
 
 
 class DeepARModel(nn.Module):
@@ -84,6 +86,10 @@ class DeepARModel(nn.Module):
     num_parallel_samples
         Number of samples to produce when unrolling the RNN in the prediction
         time range.
+    nonnegative_pred_samples
+        Should final prediction samples be non-negative? If yes, an activation
+        function is applied to ensure non-negative. Observe that this is applied
+        only to the final samples and this is not applied during training.
     """
 
     @validated()
@@ -103,8 +109,9 @@ class DeepARModel(nn.Module):
         distr_output: DistributionOutput = StudentTOutput(),
         lags_seq: Optional[List[int]] = None,
         scaling: bool = True,
-        default_scale: float = 0.0,
+        default_scale: Optional[float] = None,
         num_parallel_samples: int = 100,
+        nonnegative_pred_samples: bool = False,
     ) -> None:
         super().__init__()
 
@@ -131,6 +138,7 @@ class DeepARModel(nn.Module):
             else [min(50, (cat + 1) // 2) for cat in cardinality]
         )
         self.lags_seq = lags_seq or get_lags_for_frequency(freq_str=freq)
+        self.lags_seq = [l - 1 for l in self.lags_seq]
         self.num_parallel_samples = num_parallel_samples
         self.past_length = self.context_length + max(self.lags_seq)
         self.embedder = FeatureEmbedder(
@@ -138,7 +146,9 @@ class DeepARModel(nn.Module):
             embedding_dims=self.embedding_dimension,
         )
         if scaling:
-            self.scaler = MeanScaler(default_scale=default_scale)
+            self.scaler: Scaler = MeanScaler(
+                dim=-1, keepdim=True, default_scale=default_scale
+            )
         else:
             self.scaler = NOPScaler(dim=-1, keepdim=True)
         self.rnn_input_size = len(self.lags_seq) + self._number_of_features
@@ -148,6 +158,46 @@ class DeepARModel(nn.Module):
             num_layers=num_layers,
             dropout=dropout_rate,
             batch_first=True,
+        )
+        self.nonnegative_pred_samples = nonnegative_pred_samples
+
+    def describe_inputs(self, batch_size=1) -> InputSpec:
+        return InputSpec(
+            {
+                "feat_static_cat": Input(
+                    shape=(batch_size, self.num_feat_static_cat),
+                    dtype=torch.long,
+                ),
+                "feat_static_real": Input(
+                    shape=(batch_size, self.num_feat_static_real),
+                    dtype=torch.float,
+                ),
+                "past_time_feat": Input(
+                    shape=(
+                        batch_size,
+                        self._past_length,
+                        self.num_feat_dynamic_real,
+                    ),
+                    dtype=torch.float,
+                ),
+                "past_target": Input(
+                    shape=(batch_size, self._past_length),
+                    dtype=torch.float,
+                ),
+                "past_observed_values": Input(
+                    shape=(batch_size, self._past_length),
+                    dtype=torch.float,
+                ),
+                "future_time_feat": Input(
+                    shape=(
+                        batch_size,
+                        self.prediction_length,
+                        self.num_feat_dynamic_real,
+                    ),
+                    dtype=torch.float,
+                ),
+            },
+            zeros_fn=torch.zeros,
         )
 
     @property
@@ -163,33 +213,53 @@ class DeepARModel(nn.Module):
     def _past_length(self) -> int:
         return self.context_length + max(self.lags_seq)
 
-    def input_shapes(self, batch_size=1) -> Dict[str, Tuple[int, ...]]:
-        return {
-            "feat_static_cat": (batch_size, self.num_feat_static_cat),
-            "feat_static_real": (batch_size, self.num_feat_static_real),
-            "past_time_feat": (
-                batch_size,
-                self._past_length,
-                self.num_feat_dynamic_real,
-            ),
-            "past_target": (batch_size, self._past_length),
-            "past_observed_values": (batch_size, self._past_length),
-            "future_time_feat": (
-                batch_size,
-                self.prediction_length,
-                self.num_feat_dynamic_real,
-            ),
-        }
+    def prepare_rnn_input(
+        self,
+        feat_static_cat: torch.Tensor,
+        feat_static_real: torch.Tensor,
+        past_time_feat: torch.Tensor,
+        past_target: torch.Tensor,
+        past_observed_values: torch.Tensor,
+        future_time_feat: torch.Tensor,
+        future_target: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor,]:
+        context = past_target[..., -self.context_length :]
+        observed_context = past_observed_values[..., -self.context_length :]
 
-    def input_types(self) -> Dict[str, torch.dtype]:
-        return {
-            "feat_static_cat": torch.long,
-            "feat_static_real": torch.float,
-            "past_time_feat": torch.float,
-            "past_target": torch.float,
-            "past_observed_values": torch.float,
-            "future_time_feat": torch.float,
-        }
+        input, _, scale = self.scaler(context, observed_context)
+        future_length = future_time_feat.shape[-2]
+        if future_length > 1:
+            assert future_target is not None
+            input = torch.cat(
+                (input, future_target[..., : future_length - 1] / scale),
+                dim=-1,
+            )
+        prior_input = past_target[..., : -self.context_length] / scale
+
+        lags = lagged_sequence_values(
+            self.lags_seq, prior_input, input, dim=-1
+        )
+
+        time_feat = torch.cat(
+            (
+                take_last(past_time_feat, dim=-2, num=self.context_length - 1),
+                future_time_feat,
+            ),
+            dim=-2,
+        )
+
+        embedded_cat = self.embedder(feat_static_cat)
+        static_feat = torch.cat(
+            (embedded_cat, feat_static_real, scale.log()),
+            dim=-1,
+        )
+        expanded_static_feat = unsqueeze_expand(
+            static_feat, dim=-2, size=time_feat.shape[-2]
+        )
+
+        features = torch.cat((expanded_static_feat, time_feat), dim=-1)
+
+        return torch.cat((lags, features), dim=-1), scale, static_feat
 
     def unroll_lagged_rnn(
         self,
@@ -198,7 +268,7 @@ class DeepARModel(nn.Module):
         past_time_feat: torch.Tensor,
         past_target: torch.Tensor,
         past_observed_values: torch.Tensor,
-        future_time_feat: Optional[torch.Tensor] = None,
+        future_time_feat: torch.Tensor,
         future_target: Optional[torch.Tensor] = None,
     ) -> Tuple[
         Tuple[torch.Tensor, ...],
@@ -228,7 +298,7 @@ class DeepARModel(nn.Module):
             Tensor of observed values indicators,
             shape: ``(batch_size, past_length)``.
         future_time_feat
-            (Optional) tensor of dynamic real features in the past,
+            Tensor of dynamic real features in the future,
             shape: ``(batch_size, prediction_length, num_feat_dynamic_real)``.
         future_target
             (Optional) tensor of future target values,
@@ -244,43 +314,15 @@ class DeepARModel(nn.Module):
             - Static input to the RNN
             - Output state from the RNN
         """
-        context = past_target[..., -self.context_length :]
-        observed_context = past_observed_values[..., -self.context_length :]
-        _, _, scale = self.scaler(context, observed_context)
-
-        prior_input = past_target[..., : -self.context_length] / scale
-        input = (
-            torch.cat((context, future_target[..., :-1]), dim=-1) / scale
-            if future_target is not None
-            else context / scale
+        rnn_input, scale, static_feat = self.prepare_rnn_input(
+            feat_static_cat,
+            feat_static_real,
+            past_time_feat,
+            past_target,
+            past_observed_values,
+            future_time_feat,
+            future_target,
         )
-
-        embedded_cat = self.embedder(feat_static_cat)
-        static_feat = torch.cat(
-            (embedded_cat, feat_static_real, scale.log()),
-            dim=-1,
-        )
-        expanded_static_feat = unsqueeze_expand(
-            static_feat, dim=-2, size=input.shape[-1]
-        )
-
-        time_feat = (
-            torch.cat(
-                (
-                    past_time_feat[..., -self.context_length + 1 :, :],
-                    future_time_feat,
-                ),
-                dim=-2,
-            )
-            if future_time_feat is not None
-            else past_time_feat[..., -self.context_length + 1 :, :]
-        )
-
-        features = torch.cat((expanded_static_feat, time_feat), dim=-1)
-        lags = lagged_sequence_values(
-            self.lags_seq, prior_input, input, dim=-1
-        )
-        rnn_input = torch.cat((lags, features), dim=-1)
 
         output, new_state = self.rnn(rnn_input)
 
@@ -313,6 +355,24 @@ class DeepARModel(nn.Module):
         if trailing_n is not None:
             sliced_params = [p[:, -trailing_n:] for p in params]
         return self.distr_output.distribution(sliced_params, scale=scale)
+
+    def post_process_samples(self, samples: torch.Tensor) -> torch.Tensor:
+        """
+        Method to enforce domain-specific constraints on the generated samples.
+        For example, we can enforce forecasts to be nonnegative.
+        Parameters
+        ----------
+        samples
+            Tensor of samples
+        Returns
+        -------
+            Tensor of processed samples with the same shape.
+        """
+
+        if self.nonnegative_pred_samples:
+            return torch.relu(samples)
+
+        return samples
 
     def forward(
         self,
@@ -415,6 +475,10 @@ class DeepARModel(nn.Module):
 
         future_samples_concat = torch.cat(future_samples, dim=1)
 
+        future_samples_concat = self.post_process_samples(
+            future_samples_concat
+        )
+
         return future_samples_concat.reshape(
             (-1, num_parallel_samples, self.prediction_length)
         )
@@ -499,14 +563,16 @@ class DeepARModel(nn.Module):
             )
         else:
             distr = self.output_distribution(params, scale)
-            context_target = past_target[:, -self.context_length + 1 :]
+            context_target = take_last(
+                past_target, dim=-1, num=self.context_length - 1
+            )
             target = torch.cat(
                 (context_target, future_target_reshaped),
                 dim=1,
             )
-            context_observed = past_observed_values[
-                :, -self.context_length + 1 :
-            ]
+            context_observed = take_last(
+                past_observed_values, dim=-1, num=self.context_length - 1
+            )
             observed_values = torch.cat(
                 (context_observed, future_observed_reshaped), dim=1
             )
