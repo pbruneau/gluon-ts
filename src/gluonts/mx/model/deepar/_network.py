@@ -13,9 +13,6 @@
 
 from typing import List, Optional, Tuple, Union, Type
 
-# PBR
-import pdb
-
 import mxnet as mx
 import numpy as np
 from mxnet.gluon.contrib.rnn import VariationalDropoutCell
@@ -884,7 +881,7 @@ class DeepARTrainingNetwork(DeepARNetwork):
         )
 
         distr_args = self.proj_distr_args(rnn_outputs)
-
+        
         # return the output of rnn layers if return_rnn_outputs=True, so that
         # it can be used for regularization later assume no dropout for
         # outputs, so can be directly used for activation regularization

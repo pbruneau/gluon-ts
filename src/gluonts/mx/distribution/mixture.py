@@ -131,6 +131,7 @@ class MixtureDistribution(Distribution):
     def log_prob(self, x: Tensor) -> Tensor:
         F = self.F
 
+        # Uses LogSumExp, see DeepAR PyTorch tests notebook
         log_mix_weights = F.log(self.mixture_probs)
 
         # compute log probabilities of components
