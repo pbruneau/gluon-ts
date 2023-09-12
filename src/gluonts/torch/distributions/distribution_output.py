@@ -237,7 +237,7 @@ class GammaOutput(DistributionOutput):
         return concentration.squeeze(dim=-1), rate.squeeze(dim=-1)
 
     @property
-    def event_shape(self) -> Tuple:
+    def event_shape(self) -> Tuple:distr_args
         return ()
 
     @property
