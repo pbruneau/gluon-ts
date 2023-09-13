@@ -13,6 +13,7 @@
 
 from typing import Callable, Dict, Optional, Tuple, Type
 
+import pdb
 import numpy as np
 from mxnet import gluon
 
@@ -67,7 +68,7 @@ class ArgProj(gluon.HybridBlock):
 
     def hybrid_forward(self, F, x: Tensor, **kwargs) -> Tuple[Tensor]:
         params_unbounded = [proj(x) for proj in self.proj]
-
+        #pdb.set_trace()
         return self.domain_map(*params_unbounded)
 
 

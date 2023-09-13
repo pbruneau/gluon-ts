@@ -13,6 +13,7 @@
 
 from typing import Callable, Dict, Optional, Tuple, Type
 
+import pdb
 import numpy as np
 import torch
 import torch.nn as nn
@@ -66,8 +67,9 @@ class PtArgProj(nn.Module):
         self.domain_map = domain_map
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
+        # for Gaussian, list of Tensors here
         params_unbounded = [proj(x) for proj in self.proj]
-
+        #pdb.set_trace()
         return self.domain_map(*params_unbounded)
 
 
@@ -237,7 +239,7 @@ class GammaOutput(DistributionOutput):
         return concentration.squeeze(dim=-1), rate.squeeze(dim=-1)
 
     @property
-    def event_shape(self) -> Tuple:distr_args
+    def event_shape(self) -> Tuple:
         return ()
 
     @property

@@ -37,6 +37,7 @@ from .spliced_binned_pareto import (
 )
 from .studentT import StudentTOutput
 from .truncated_normal import TruncatedNormal, TruncatedNormalOutput
+from .mixture_same_family import MixtureSameFamilyOutput
 
 __all__ = [
     "AffineTransformed",
@@ -55,6 +56,7 @@ __all__ = [
     "LaplaceOutput",
     "MQF2Distribution",
     "MQF2DistributionOutput",
+    "MixtureSameFamilyOutput",
     "NegativeBinomialOutput",
     "NormalOutput",
     "PiecewiseLinear",
