@@ -32,7 +32,7 @@ class MixtureArgs(nn.Module):
         
         self.proj_mixture_probs = nn.Sequential(
             nn.Linear(in_features, self.num_components),
-            LambdaLayer(lambda x: torch.softmax(x, dim=1))
+            LambdaLayer(lambda x: torch.softmax(x, dim=2))
         )        
         
         for do in distr_outputs:
@@ -73,7 +73,7 @@ class MixtureSameFamilyOutput(DistributionOutput):
             comp_args_concat[i] = torch.cat([c[i] for c in component_args])
         
         return MixtureSameFamily(
-            mixture_distribution = Categorical(mixture_probs),            
+            mixture_distribution = Categorical(mixture_probs),
             component_distribution = self.distr_outputs[0].distribution(comp_args_concat, loc=loc, scale=scale)
         )
 
