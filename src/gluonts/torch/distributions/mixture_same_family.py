@@ -27,23 +27,34 @@ class MixtureArgs(nn.Module):
         distr_outputs: List[DistributionOutput],
     ) -> None:
         super().__init__()
+        self.in_features = in_features
         self.num_components = len(distr_outputs)
         self.component_projections = nn.ModuleList()
         
         self.proj_mixture_probs = nn.Sequential(
             nn.Linear(in_features, self.num_components),
             LambdaLayer(lambda x: torch.softmax(x, dim=2))
-        )        
+        )
         
         for do in distr_outputs:
             self.component_projections.append(
                 do.get_args_proj(in_features)
             )
+        self.per_comp_len = len(self.component_projections[0].args_dim.keys())
+        
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
         mixture_probs = self.proj_mixture_probs(x)
-        component_args = [c_proj(x) for c_proj in self.component_projections]
-        pdb.set_trace()
+        
+        #pdb.set_trace()
+        # flattening component hierarchy
+        component_args = []
+        for c_proj in self.component_projections:
+            c_proj = c_proj(x)
+            for i in range(len(c_proj)):
+                component_args.append(c_proj[i])
+
+        #pdb.set_trace()
         return tuple([mixture_probs] + component_args)
 
 
@@ -52,9 +63,12 @@ class MixtureSameFamilyOutput(DistributionOutput):
     def __init__(self, distr_outputs: List[DistributionOutput]) -> None:
         self.num_components = len(distr_outputs)
         self.distr_outputs = distr_outputs
+        self.per_comp_len = None
 
     def get_args_proj(self, in_features: int) -> MixtureArgs:
-        return MixtureArgs(in_features, self.distr_outputs)
+        mix_args = MixtureArgs(in_features, self.distr_outputs)
+        self.per_comp_len = mix_args.per_comp_len
+        return mix_args
 
     
     def distribution(
@@ -65,9 +79,12 @@ class MixtureSameFamilyOutput(DistributionOutput):
         **kwargs,
     ) -> MixtureSameFamily:
         # dealing with single component / broadasted parameters expected by NormalOutput
+        # and flattened component structure
         mixture_probs = distr_args[0]
         component_args = distr_args[1:]
-        nparams = len(component_args[0])
+        
+        #pdb.set_trace()
+        # checked that per_comp_len is available at this stage
         comp_args_concat = []
         for i in range(nparams):
             comp_args_concat[i] = torch.cat([c[i] for c in component_args])
