@@ -2,7 +2,7 @@ from typing import Dict, Optional, Tuple, Union, List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions.categorical import Categorical
+from torch.distributions import Categorical, Normal
 from torch.distributions.mixture_same_family import MixtureSameFamily
 from .distribution_output import DistributionOutput
 from gluonts.torch.modules.lambda_layer import LambdaLayer
@@ -54,6 +54,9 @@ class MixtureArgs(nn.Module):
             for i in range(len(c_proj)):
                 component_args.append(c_proj[i])
 
+        # mixture probs: (batch_size, nsteps, ncomp)
+        # component_args: list with ncomp*nparams (batch_size, nsteps) (respective order)
+        
         #pdb.set_trace()
         return tuple([mixture_probs] + component_args)
 
@@ -83,14 +86,45 @@ class MixtureSameFamilyOutput(DistributionOutput):
         mixture_probs = distr_args[0]
         component_args = distr_args[1:]
         
-        #pdb.set_trace()
-        # checked that per_comp_len is available at this stage
+        pdb.set_trace()
+        
+        # mixture_distribution expects (batch_size, ncomp)
+        # mixture_probs is (nhidden, 1, ncomp)
+        
+        # component_distribution argument of MixtureSameFamily expects (batch_size, ncomp, nparam)        
+        # component_args is list with ncomp*nparams (nhidden, 1)
+        
+        # in MXNet, mixture_probs is (batch_size, nsteps, ncomp) 
+        # component_args has cells (batch_size, nstep) at this stage
+        # loc is None
+        # scale is (batch_size, 1)
+        
+        
+        # with NormalOutput, list nparams (nhidden, 1), passed to base distribution constructor (which expands it),
+        # so output is consistent
+        # loc is None
+        # shape is (nhidden, 1)
+        
+        # for consistency with single output and class signature, argments to MixtureSameFamily should be:
+        # mixture_distribution: (nhidden, ncomp)
+        # component_distribution: list nparam (nhidden, ncomp)
+        # (if fails, leaving the trailing 1)
+        
+        nhidden = mixture_probs.shape[0]
+        
         comp_args_concat = []
-        for i in range(nparams):
-            comp_args_concat[i] = torch.cat([c[i] for c in component_args])
+        for j in range(self.per_comp_len):
+            tensor = torch.empty((nhidden, self.num_components))
+            
+            for i in range(self.num_components):
+                index = i*self.per_comp_len + j
+                tensor[:, i] = component_args[index].squeeze(dim=1)
+            comp_args_concat.append(tensor)
+        
+        pdb.set_trace()
         
         return MixtureSameFamily(
-            mixture_distribution = Categorical(mixture_probs),
+            mixture_distribution = Categorical(mixture_probs.squeeze(dim=1)),
             component_distribution = self.distr_outputs[0].distribution(comp_args_concat, loc=loc, scale=scale)
         )
 

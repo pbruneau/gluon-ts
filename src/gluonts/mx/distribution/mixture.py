@@ -239,7 +239,7 @@ class MixtureArgs(gluon.HybridBlock):
     def hybrid_forward(self, F, x: Tensor) -> Tuple[Tensor, ...]:
         mixture_probs = self.proj_mixture_probs(x)
         component_args = [c_proj(x) for c_proj in self.component_projections]
-        pdb.set_trace()
+        #pdb.set_trace()
         return tuple([mixture_probs] + component_args)
 
 
@@ -262,6 +262,9 @@ class MixtureDistributionOutput(DistributionOutput):
     ) -> MixtureDistribution:
         mixture_probs = distr_args[0]
         component_args = distr_args[1:]
+        
+        pdb.set_trace()
+        
         return MixtureDistribution(
             mixture_probs=mixture_probs,
             components=[
