@@ -15,6 +15,7 @@ from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+import pdb
 
 from gluonts.core.component import validated
 from gluonts.time_feature import get_lags_for_frequency
@@ -448,6 +449,8 @@ class DeepARModel(nn.Module):
         distr = self.output_distribution(
             repeated_params, trailing_n=1, scale=repeated_scale
         )
+        
+        pdb.set_trace()
         next_sample = distr.sample()
         future_samples = [next_sample]
 
@@ -457,6 +460,7 @@ class DeepARModel(nn.Module):
                 (repeated_static_feat, repeated_time_feat[:, k : k + 1]),
                 dim=-1,
             )
+            
             next_lags = lagged_sequence_values(
                 self.lags_seq, repeated_past_target, scaled_next_sample, dim=-1
             )
