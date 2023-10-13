@@ -137,7 +137,7 @@ class DistributionOutput(Output):
             batch_shape+event_shape of the resulting distribution.
         """
         
-        pdb.set_trace()
+        #pdb.set_trace()
         
         distr = self._base_distribution(distr_args)
         if loc is None and scale is None:

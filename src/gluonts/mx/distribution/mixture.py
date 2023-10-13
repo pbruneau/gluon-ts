@@ -263,7 +263,7 @@ class MixtureDistributionOutput(DistributionOutput):
         mixture_probs = distr_args[0]
         component_args = distr_args[1:]
         
-        pdb.set_trace()
+        #pdb.set_trace()
         
         return MixtureDistribution(
             mixture_probs=mixture_probs,

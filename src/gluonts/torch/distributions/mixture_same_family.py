@@ -86,7 +86,7 @@ class MixtureSameFamilyOutput(DistributionOutput):
         mixture_probs = distr_args[0]
         component_args = distr_args[1:]
         
-        pdb.set_trace()
+        #pdb.set_trace()
         
         # mixture_distribution expects (batch_size, ncomp)
         # mixture_probs is (nhidden, 1, ncomp)
@@ -104,6 +104,12 @@ class MixtureSameFamilyOutput(DistributionOutput):
         # so output is consistent
         # loc is None
         # shape is (nhidden, 1)
+        # !!! in inference mode, the shape is not the same at all: becomes (nbatch, nsteps)
+        # and shape is (nbatch, 1)
+        # so the 1 in initialization may be expanded to arbitrary size (trailing 1 has to be accounted for)
+        # in the end, nhidden must be taken homogeneously to batch size
+        # consistent with observations with mixture: list ordering system unchanged
+        # just account correctly for additional dim
         
         # for consistency with single output and class signature, argments to MixtureSameFamily should be:
         # mixture_distribution: (nhidden, ncomp)
@@ -114,6 +120,8 @@ class MixtureSameFamilyOutput(DistributionOutput):
         
         comp_args_concat = []
         for j in range(self.per_comp_len):
+            #if i==0 and j==0:
+            #    pdb.set_trace()
             tensor = torch.empty((nhidden, self.num_components))
             
             for i in range(self.num_components):
@@ -121,7 +129,7 @@ class MixtureSameFamilyOutput(DistributionOutput):
                 tensor[:, i] = component_args[index].squeeze(dim=1)
             comp_args_concat.append(tensor)
         
-        pdb.set_trace()
+        #pdb.set_trace()
         
         return MixtureSameFamily(
             mixture_distribution = Categorical(mixture_probs.squeeze(dim=1)),
