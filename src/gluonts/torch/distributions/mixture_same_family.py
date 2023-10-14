@@ -105,6 +105,8 @@ class MixtureSameFamilyOutput(DistributionOutput):
         # loc is None
         # shape is (nhidden, 1)
         # !!! in inference mode, the shape is not the same at all: becomes (nbatch, nsteps)
+        # and mixture params are (nbatch, nsteps, ncomp), which is incompliant with pytorch mixture_same_family
+        # need to flatten and unflatten
         # and shape is (nbatch, 1)
         # so the 1 in initialization may be expanded to arbitrary size (trailing 1 has to be accounted for)
         # in the end, nhidden must be taken homogeneously to batch size
