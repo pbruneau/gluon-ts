@@ -109,12 +109,15 @@ class MixtureSameFamilyOutput(DistributionOutput):
         # for consistency with single output and class signature, argments to MixtureSameFamily should be:
         # mixture_distribution: (batch_size, nsteps, ncomp)
         # component_distribution: list nparam (batch_size, nsteps, ncomp)
+
+        # mimic device used elsewhere
+        device = scale.device
         
         comp_args_concat = []
         for j in range(self.per_comp_len):
             #if i==0 and j==0:
             #    pdb.set_trace()
-            tensor = torch.empty((batch_size, nsteps, self.num_components))
+            tensor = torch.empty((batch_size, nsteps, self.num_components), device=device)
             
             for i in range(self.num_components):
                 index = i*self.per_comp_len + j
