@@ -185,7 +185,7 @@ class NormalOutput(DistributionOutput):
     distr_cls: type = Normal
 
     @classmethod
-    def domain_map(cls, loc: torch.Tensor, scale: torch.Tensor):
+    def domain_map(cls, loc: torch.Tensor, scale: torch.Tensor):  # type: ignore
         scale = F.softplus(scale)
         return loc.squeeze(-1), scale.squeeze(-1)
 
@@ -199,7 +199,7 @@ class LaplaceOutput(DistributionOutput):
     distr_cls: type = Laplace
 
     @classmethod
-    def domain_map(cls, loc: torch.Tensor, scale: torch.Tensor):
+    def domain_map(cls, loc: torch.Tensor, scale: torch.Tensor):  # type: ignore
         scale = F.softplus(scale)
         return loc.squeeze(-1), scale.squeeze(-1)
 
@@ -213,7 +213,7 @@ class BetaOutput(DistributionOutput):
     distr_cls: type = Beta
 
     @classmethod
-    def domain_map(
+    def domain_map(  # type: ignore
         cls, concentration1: torch.Tensor, concentration0: torch.Tensor
     ):
         epsilon = np.finfo(cls._dtype).eps  # machine epsilon
@@ -235,7 +235,7 @@ class GammaOutput(DistributionOutput):
     distr_cls: type = Gamma
 
     @classmethod
-    def domain_map(cls, concentration: torch.Tensor, rate: torch.Tensor):
+    def domain_map(cls, concentration: torch.Tensor, rate: torch.Tensor):  # type: ignore
         epsilon = np.finfo(cls._dtype).eps  # machine epsilon
         concentration = F.softplus(concentration) + epsilon
         rate = F.softplus(rate) + epsilon
@@ -255,7 +255,7 @@ class PoissonOutput(DistributionOutput):
     distr_cls: type = Poisson
 
     @classmethod
-    def domain_map(cls, rate: torch.Tensor):
+    def domain_map(cls, rate: torch.Tensor):  # type: ignore
         rate_pos = F.softplus(rate).clone()
         return (rate_pos.squeeze(-1),)
 

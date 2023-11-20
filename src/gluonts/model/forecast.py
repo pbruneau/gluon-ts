@@ -12,19 +12,23 @@
 # permissions and limitations under the License.
 
 import re
+import logging
 from dataclasses import field
 from typing import Callable, Dict, List, Optional, Union, Tuple
 
 import numpy as np
 import pandas as pd
-from pydantic.dataclasses import dataclass
 
 from gluonts.core.component import validated
+from gluonts.pydantic import dataclass
 from gluonts import maybe
 
 
+logger = logging.getLogger(__name__)
+
+
 def _linear_interpolation(
-    xs: np.ndarray, ys: np.ndarray, x: float
+    xs: List[float], ys: List[np.ndarray], x: float
 ) -> np.ndarray:
     assert sorted(xs) == xs
     assert len(xs) == len(ys)
@@ -237,19 +241,22 @@ class Quantile:
 
 class Forecast:
     """
-    A abstract class representing predictions.
+    Abstract class representing predictions.
     """
 
     start_date: pd.Period
     item_id: Optional[str]
     info: Optional[Dict]
     prediction_length: int
-    mean: np.ndarray
     _index = None
+
+    @property
+    def mean(self) -> np.ndarray:
+        raise NotImplementedError()
 
     def quantile(self, q: Union[float, str]) -> np.ndarray:
         """
-        Computes a quantile from the predicted distribution.
+        Compute a quantile from the predicted distribution.
 
         Parameters
         ----------
@@ -313,7 +320,7 @@ class Forecast:
         # If no color is provided, we use matplotlib's internal color cycle.
         # Note: This is an internal API and might change in the future.
         color = maybe.unwrap_or_else(
-            color, lambda: next(ax._get_lines.prop_cycler)["color"]
+            color, lambda: ax._get_lines.get_next_color()
         )
 
         # Plot median forecast
@@ -364,13 +371,13 @@ class Forecast:
 
     def dim(self) -> int:
         """
-        Returns the dimensionality of the forecast object.
+        Return the dimensionality of the forecast object.
         """
         raise NotImplementedError()
 
     def copy_dim(self, dim: int):
         """
-        Returns a new Forecast object with only the selected sub-dimension.
+        Return a new Forecast object with only the selected sub-dimension.
 
         Parameters
         ----------
@@ -381,7 +388,7 @@ class Forecast:
 
     def copy_aggregate(self, agg_fun: Callable):
         """
-        Returns a new Forecast object with a time series aggregated over the
+        Return a new Forecast object with a time series aggregated over the
         dimension axis.
 
         Parameters
@@ -404,9 +411,11 @@ class SampleForecast(Forecast):
         Array of size (num_samples, prediction_length) (1D case) or
         (num_samples, prediction_length, target_dim) (multivariate case)
     start_date
-        start of the forecast
+        Start of the forecast.
+    item_id
+        Identifier of the item being forecasted.
     info
-        additional information that the forecaster may provide e.g. estimated
+        Additional information that the forecaster may provide e.g. estimated
         parameters, number of iterations ran etc.
     """
 
@@ -428,7 +437,7 @@ class SampleForecast(Forecast):
         self.samples = samples
         self._sorted_samples_value = None
         self._mean = None
-        self._dim = None
+        self._dim: Optional[int] = None
         self.item_id = item_id
         self.info = info
 
@@ -464,6 +473,7 @@ class SampleForecast(Forecast):
         """
         if self._mean is None:
             self._mean = np.mean(self.samples, axis=0)
+        assert self._mean is not None
         return self._mean
 
     @property
@@ -535,7 +545,7 @@ class SampleForecast(Forecast):
         return QuantileForecast(
             forecast_arrays=np.array(
                 [
-                    self.quantile(q) if q != "mean" else self.mean()
+                    self.quantile(q) if q != "mean" else self.mean
                     for q in quantiles
                 ]
             ),
@@ -560,8 +570,10 @@ class QuantileForecast(Forecast):
         A list of quantiles of the form '0.1', '0.9', etc.,
         and potentially 'mean'. Each entry corresponds to one array in
         forecast_arrays.
+    item_id
+        Identifier of the item being forecasted.
     info
-        additional information that the forecaster may provide e.g. estimated
+        Additional information that the forecaster may provide e.g. estimated
         parameters, number of iterations ran etc.
     """
 
@@ -586,7 +598,7 @@ class QuantileForecast(Forecast):
         ]
         self.item_id = item_id
         self.info = info
-        self._dim = None
+        self._dim: Optional[int] = None
 
         shape = self.forecast_array.shape
         assert shape[0] == len(self.forecast_keys), (
@@ -627,7 +639,9 @@ class QuantileForecast(Forecast):
             return exp_tail_approximation.right(inference_quantile)
         else:
             return _linear_interpolation(
-                quantiles, quantile_predictions, inference_quantile
+                quantiles,
+                quantile_predictions,
+                inference_quantile,
             )
 
     def copy_dim(self, dim: int) -> "QuantileForecast":
@@ -656,7 +670,11 @@ class QuantileForecast(Forecast):
         """
         if "mean" in self._forecast_dict:
             return self._forecast_dict["mean"]
-
+        logger.warning(
+            "The mean prediction is not stored in the forecast data; "
+            "the median is being returned instead. "
+            "This behaviour may change in the future."
+        )
         return self.quantile("p50")
 
     def dim(self) -> int:

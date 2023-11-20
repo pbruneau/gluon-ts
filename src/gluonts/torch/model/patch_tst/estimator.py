@@ -14,7 +14,7 @@
 from typing import Optional, Iterable, Dict, Any
 
 import torch
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 
 from gluonts.core.component import validated
 from gluonts.dataset.common import Dataset
@@ -279,5 +279,5 @@ class PatchTSTEstimator(PyTorchLightningEstimator):
             ),
             batch_size=self.batch_size,
             prediction_length=self.prediction_length,
-            device="cuda" if torch.cuda.is_available() else "cpu",
+            device="auto",
         )

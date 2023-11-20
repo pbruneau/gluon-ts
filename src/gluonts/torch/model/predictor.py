@@ -29,6 +29,7 @@ from gluonts.model.forecast_generator import (
 )
 from gluonts.model.predictor import OutputTransform, RepresentablePredictor
 from gluonts.torch.batchify import batchify
+from gluonts.torch.util import resolve_device
 from gluonts.transform import Transformation, SelectFields
 
 
@@ -49,28 +50,28 @@ class PyTorchPredictor(RepresentablePredictor):
         forecast_generator: ForecastGenerator = SampleForecastGenerator(),
         output_transform: Optional[OutputTransform] = None,
         lead_time: int = 0,
-        device: Optional[str] = "cpu",
+        device: str = "auto",
     ) -> None:
         super().__init__(prediction_length, lead_time=lead_time)
         self.input_names = input_names
-        self.prediction_net = prediction_net.to(device)
         self.batch_size = batch_size
         self.input_transform = input_transform
         self.forecast_generator = forecast_generator
         self.output_transform = output_transform
-        self.device = device
+        self.device = resolve_device(device)
+        self.prediction_net = prediction_net.to(self.device)
         self.required_fields = ["forecast_start", "item_id", "info"]
 
-    def to(self, device) -> "PyTorchPredictor":
-        self.prediction_net = self.prediction_net.to(device)
-        self.device = device
+    def to(self, device: Union[str, torch.device]) -> "PyTorchPredictor":
+        self.device = resolve_device(device)
+        self.prediction_net = self.prediction_net.to(self.device)
         return self
 
     @property
     def network(self) -> nn.Module:
         return self.prediction_net
 
-    def predict(
+    def predict(  # type: ignore
         self, dataset: Dataset, num_samples: Optional[int] = None
     ) -> Iterator[Forecast]:
         inference_data_loader = InferenceDataLoader(
@@ -98,20 +99,25 @@ class PyTorchPredictor(RepresentablePredictor):
         super().serialize(path)
 
         torch.save(
-            self.prediction_net.state_dict(), path / "prediction_net_state"
+            self.prediction_net.state_dict(), path / "prediction-net-state.pt"
         )
 
     @classmethod
-    def deserialize(
+    def deserialize(  # type: ignore
         cls, path: Path, device: Optional[Union[str, torch.device]] = None
     ) -> "PyTorchPredictor":
         predictor = super().deserialize(path)
 
-        if device is None:
-            device = "cuda" if torch.cuda.is_available() else "cpu"
+        assert isinstance(predictor, cls)
 
-        predictor.prediction_net.load_state_dict(
-            torch.load(path / "prediction_net_state", map_location=device)
+        if device is not None:
+            device = resolve_device(device)
+            predictor.to(device)
+
+        state_dict = torch.load(
+            path / "prediction-net-state.pt",
+            map_location=device,
         )
+        predictor.prediction_net.load_state_dict(state_dict)
 
         return predictor
