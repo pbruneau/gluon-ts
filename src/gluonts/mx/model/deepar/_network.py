@@ -33,6 +33,7 @@ from gluonts.mx.distribution.distribution import getF
 from gluonts.mx.util import weighted_average, mx_switch
 from mxnet import autograd
 
+import pdb
 
 class DeepARNetwork(mx.gluon.HybridBlock):
     @validated()
@@ -955,7 +956,9 @@ class DeepARTrainingNetwork(DeepARNetwork):
             future_target,
             dim=1,
         )
-
+        # PBR
+        #pdb.set_trace()
+        
         # (batch_size, seq_len)
         loss = distr.loss(target)
 
