@@ -45,8 +45,10 @@ class MixtureArgs(nn.Module):
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
         mixture_probs = self.proj_mixture_probs(x)
-        
-        #pdb.set_trace()
+        # input has shape (batch_size, nsteps, nhidden)
+        # proj_mixture_probs: (nhidden, ncomp)
+        # component_projections: list[ncomp] of list[nparams] (tuples?) (nhidden, 1)
+
         # flattening component hierarchy
         component_args = []
         for c_proj in self.component_projections:
@@ -54,10 +56,13 @@ class MixtureArgs(nn.Module):
             for i in range(len(c_proj)):
                 component_args.append(c_proj[i])
 
-        # mixture probs: (batch_size, nsteps, ncomp)
-        # component_args: list with ncomp*nparams (batch_size, nsteps) (ncomp major)
+        #if x.shape[0] != 100:
+        #    pdb.set_trace()
         
-        #pdb.set_trace()
+        # mixture probs: (batch_size, nsteps, ncomp)
+        # component_args: list[ncomp*nparams] (batch_size, nsteps) (ncomp major)
+        # does not play nice with nested list as with MXNet
+        
         return tuple([mixture_probs] + component_args)
 
 
@@ -93,22 +98,22 @@ class MixtureSameFamilyOutput(DistributionOutput):
         # mixture_distribution expects (batch_size, nsteps, ncomp)
         # mixture_probs is (batch_size, nsteps, ncomp)
         
-        # component_distribution argument of MixtureSameFamily expects list (batch_size, nsteps, ncomp)
-        # component_args is list with ncomp*nparams (batch_size, nsteps)
+        # component_distribution argument of MixtureSameFamily expects list[nparams] (batch_size, nsteps, ncomp)
+        # component_args is list[ncomp*nparams] (batch_size, nsteps) (as obtained from forward)
         
         # in MXNet, mixture_probs is (batch_size, nsteps, ncomp) 
         # component_args has cells (batch_size, nstep) at this stage
         # loc is None
         # scale is (batch_size, 1)
         
-        # with NormalOutput, list nparams (batch_size, nsteps), passed to base distribution constructor (which expands it),
+        # with NormalOutput, list[nparams] (batch_size, nsteps), passed to base distribution constructor (which expands it),
         # so output is consistent
         # loc is None
         # shape is (batch_size, 1)
         
         # for consistency with single output and class signature, argments to MixtureSameFamily should be:
         # mixture_distribution: (batch_size, nsteps, ncomp)
-        # component_distribution: list nparam (batch_size, nsteps, ncomp)
+        # component_distribution: list[nparams] (batch_size, nsteps, ncomp)
 
         # mimic device used elsewhere
         device = scale.device
@@ -143,4 +148,3 @@ class MixtureSameFamilyOutput(DistributionOutput):
 
 
     
-# currently dimensions and compatibility not really addressed

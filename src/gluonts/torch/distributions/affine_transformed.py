@@ -38,6 +38,7 @@ class AffineTransformed(TransformedDistribution):
     def __init__(self, base_distribution: Distribution, loc=None, scale=None):
         self.scale = 1.0 if scale is None else scale
         self.loc = 0.0 if loc is None else loc
+        self._base_distribution = base_distribution
 
         super().__init__(
             base_distribution, [AffineTransform(self.loc, self.scale)]

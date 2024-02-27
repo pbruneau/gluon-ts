@@ -218,6 +218,8 @@ class MixtureArgs(gluon.HybridBlock):
         distr_outputs: List[DistributionOutput],
         prefix: Optional[str] = None,
     ) -> None:
+        # combines args projs fetched from component distribution (distr_outputs)
+        # + specific projection for mixture
         super().__init__()
         self.num_components = len(distr_outputs)
         self.component_projections: List[gluon.HybridBlock] = []
@@ -239,6 +241,13 @@ class MixtureArgs(gluon.HybridBlock):
     def hybrid_forward(self, F, x: Tensor) -> Tuple[Tensor, ...]:
         mixture_probs = self.proj_mixture_probs(x)
         component_args = [c_proj(x) for c_proj in self.component_projections]
+        # input has shape (batch_size, nsteps, nhidden)
+        # proj_mixture_probs: (nhidden, ncomp)
+        # component_projections: list[ncomp] of lists[nparams] (nhidden, 1) (accessed via proj property)
+        
+        # mixture probs: (batch_size, nsteps, ncomp)
+        # component_args: list[ncomp] of list[nparams] (batch_size, nsteps))
+        # NB: callable transfers the tuple structure
         #pdb.set_trace()
         return tuple([mixture_probs] + component_args)
 
@@ -262,6 +271,7 @@ class MixtureDistributionOutput(DistributionOutput):
     ) -> MixtureDistribution:
         mixture_probs = distr_args[0]
         component_args = distr_args[1:]
+        # distr_args as resulting from hybrid_forward
         
         #pdb.set_trace()
         
