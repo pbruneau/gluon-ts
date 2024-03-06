@@ -24,11 +24,12 @@ class MixtureArgs(nn.Module):
     def __init__(
         self,
         in_features: int,
-        distr_outputs: List[DistributionOutput],
+        num_components: int,
+        distr_output: DistributionOutput,
     ) -> None:
         super().__init__()
         self.in_features = in_features
-        self.num_components = len(distr_outputs)
+        self.num_components = num_components
         self.component_projections = nn.ModuleList()
         
         self.proj_mixture_probs = nn.Sequential(
@@ -36,46 +37,48 @@ class MixtureArgs(nn.Module):
             LambdaLayer(lambda x: torch.softmax(x, dim=2))
         )
         
-        for do in distr_outputs:
-            self.component_projections.append(
-                do.get_args_proj(in_features)
-            )
-        self.per_comp_len = len(self.component_projections[0].args_dim.keys())
+        # hack to have single tuple of linear projections with num_component output dims
+        # to comply with mytorch way to handle mixtures
+        distr_output.args_dim = {key: num_components for key in distr_output.args_dim.keys()}
+        self.component_projection = distr_output.get_args_proj(in_features)
+        
+        self.nparams = len(self.component_projection.args_dim.keys())
+        #pdb.set_trace()
         
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
-        mixture_probs = self.proj_mixture_probs(x)
         # input has shape (batch_size, nsteps, nhidden)
         # proj_mixture_probs: (nhidden, ncomp)
         # component_projections: list[ncomp] of list[nparams] (tuples?) (nhidden, 1)
 
-        # flattening component hierarchy
-        component_args = []
-        for c_proj in self.component_projections:
-            c_proj = c_proj(x)
-            for i in range(len(c_proj)):
-                component_args.append(c_proj[i])
+        mixture_probs = self.proj_mixture_probs(x)
+        component_proj = self.component_projection(x)
 
         #if x.shape[0] != 100:
         #    pdb.set_trace()
+        #pdb.set_trace()
         
         # mixture probs: (batch_size, nsteps, ncomp)
         # component_args: list[ncomp*nparams] (batch_size, nsteps) (ncomp major)
         # does not play nice with nested list as with MXNet
         
-        return tuple([mixture_probs] + component_args)
+        return tuple([mixture_probs] + list(component_proj))
 
 
 class MixtureSameFamilyOutput(DistributionOutput):
     @validated()
-    def __init__(self, distr_outputs: List[DistributionOutput]) -> None:
-        self.num_components = len(distr_outputs)
-        self.distr_outputs = distr_outputs
-        self.per_comp_len = None
+    def __init__(self, 
+                 # using the torch way of representing mixtures
+                 # with mixture_same_family
+                 distr_output: DistributionOutput, 
+                 num_components: int) -> None:
+        self.num_components = num_components
+        self.distr_output = distr_output
+        self.nparams = None
 
     def get_args_proj(self, in_features: int) -> MixtureArgs:
-        mix_args = MixtureArgs(in_features, self.distr_outputs)
-        self.per_comp_len = mix_args.per_comp_len
+        mix_args = MixtureArgs(in_features, self.num_components, self.distr_output)
+        self.nparams = mix_args.nparams
         return mix_args
 
     
@@ -115,36 +118,37 @@ class MixtureSameFamilyOutput(DistributionOutput):
         # mixture_distribution: (batch_size, nsteps, ncomp)
         # component_distribution: list[nparams] (batch_size, nsteps, ncomp)
 
-        # mimic device used elsewhere
-        device = scale.device
-        
-        comp_args_concat = []
-        for j in range(self.per_comp_len):
-            #if i==0 and j==0:
-            #    pdb.set_trace()
-            tensor = torch.empty((batch_size, nsteps, self.num_components), device=device)
-            
-            for i in range(self.num_components):
-                index = i*self.per_comp_len + j
-                tensor[:, :, i] = component_args[index]
-            comp_args_concat.append(tensor)
-        
-        #pdb.set_trace()
+
+        ## mimic device used elsewhere
+        #device = scale.device
+        #
+        #comp_args_concat = []
+        #for j in range(self.nparams):
+        #    #if i==0 and j==0:
+        #    #    pdb.set_trace()
+        #    tensor = torch.empty((batch_size, nsteps, self.num_components), device=device)
+        #    
+        #    for i in range(self.num_components):
+        #        index = i*self.nparams + j
+        #        tensor[:, :, i] = component_args[index]
+        #    comp_args_concat.append(tensor)
+        #
+        ##pdb.set_trace()
         
         return MixtureSameFamily(
             mixture_distribution = Categorical(mixture_probs),
             # unsqueeze so that scale matches the mixture specification
-            component_distribution = self.distr_outputs[0].distribution(comp_args_concat, loc=loc, \
+            component_distribution = self.distr_output.distribution(component_args, loc=loc, \
                                                                         scale=scale.unsqueeze(-1))
         )
 
     @property
     def event_shape(self) -> Tuple:
-        return self.distr_outputs[0].event_shape
+        return self.distr_output.event_shape
 
     @property
     def value_in_support(self) -> float:
-        return self.distr_outputs[0].value_in_support
+        return self.distr_output.value_in_support
 
 
     
