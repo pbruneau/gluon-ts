@@ -17,6 +17,7 @@ import pdb
 import mxnet as mx
 import numpy as np
 from mxnet import gluon
+from mxnet import nd
 
 from gluonts.core.component import validated
 from gluonts.mx import Tensor
@@ -29,6 +30,27 @@ from .distribution import (
     getF,
 )
 from .distribution_output import DistributionOutput
+
+def ndarray_std(x, axis=None):
+    """
+    Compute the standard deviation along the specified axis.
+    If axis='all', compute the grand standard deviation over all elements.
+    """
+    if axis is None:
+        # Treat x as a flattened array to compute the grand standard deviation
+        x_flat = x.flatten()
+        mean_val = nd.mean(x_flat)
+        squared_deviations = nd.square(x_flat - mean_val)
+    else:
+        # Compute mean along the specified axis and expand dimensions for broadcasting
+        mean_val = nd.mean(x, axis=axis)
+        for ax in sorted(axis):
+            mean_val = mean_val.expand_dims(axis=ax)
+        
+        squared_deviations = nd.square(x - mean_val)
+        
+    mean_squared_deviations = nd.mean(squared_deviations, axis=axis)
+    return nd.sqrt(mean_squared_deviations)
 
 
 class MixtureDistribution(Distribution):

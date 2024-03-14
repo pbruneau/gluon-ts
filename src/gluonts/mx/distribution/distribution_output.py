@@ -23,7 +23,6 @@ from gluonts.mx import Tensor
 from .distribution import Distribution
 from .transformed_distribution import AffineTransformedDistribution
 
-
 class ArgProj(gluon.HybridBlock):
     r"""
     A block that can be used to project from a dense layer to distribution
