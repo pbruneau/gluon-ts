@@ -580,15 +580,18 @@ class DeepARModel(nn.Module):
             observed_values = torch.cat(
                 (context_observed, future_observed_reshaped), dim=1
             )
-
-            # PBR
-            #pdb.set_trace()
             
             loss_values = loss(distr, target) * observed_values
 
         loss_values = loss_values.reshape(*batch_shape, *loss_values.shape[1:])
 
-        return aggregate_by(
+        # log losses at this level
+        weighted_loss = aggregate_by(
             loss_values,
             dim=tuple(range(extra_dims + 1, len(future_target.shape))),
         )
+        
+        # PBR
+        #pdb.set_trace()
+
+        return weighted_loss

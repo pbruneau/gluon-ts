@@ -5,11 +5,12 @@ import pdb
 from torch.distributions import Categorical, Distribution
 from typing import Optional, List
 
+from gluonts.core.component import validated
 from gluonts.torch.distributions import DistributionOutput
 
 class MixtureDistribution(Distribution):
     def __init__(self, mixture_probs: torch.Tensor, components: List[Distribution]) -> None:
-        super().__init__()
+        super().__init__(self, validate_args={})
         self.mixture_probs = mixture_probs
         self.components = components
         self.categorical = Categorical(probs=mixture_probs)
@@ -46,10 +47,13 @@ class MixtureArgs(nn.Module):
         return [mixture_probs] + component_args
 
 class MixtureDistributionOutput(DistributionOutput):
+    distr_cls: type = MixtureDistribution
+    
+    @validated()
     def __init__(self, distr_outputs: List[DistributionOutput]) -> None:
-        super().__init__()
+        super().__init__(self)
         self.distr_outputs = distr_outputs
-
+    
     def get_args_proj(self, in_features: int) -> nn.Module:
         return MixtureArgs(in_features, self.distr_outputs)
 

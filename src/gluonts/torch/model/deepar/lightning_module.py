@@ -21,7 +21,7 @@ from gluonts.torch.modules.loss import DistributionLoss, NegativeLogLikelihood
 from gluonts.torch.model.lightning_util import has_validation_loop
 
 from .module import DeepARModel
-
+import pdb
 
 class DeepARLightningModule(pl.LightningModule):
     """
@@ -78,6 +78,8 @@ class DeepARLightningModule(pl.LightningModule):
             loss=self.loss,
         ).mean()
 
+        #pdb.set_trace()
+        
         self.log(
             "train_loss",
             train_loss,
