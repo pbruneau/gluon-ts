@@ -594,4 +594,4 @@ class DeepARModel(nn.Module):
         # PBR
         #pdb.set_trace()
 
-        return weighted_loss
+        return weighted_loss, distr

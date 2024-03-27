@@ -71,14 +71,18 @@ class DeepARLightningModule(pl.LightningModule):
         """
         Execute training step.
         """
-        train_loss = self.model.loss(
+        train_loss, distr = self.model.loss(
             **select(self.inputs, batch),
             future_observed_values=batch["future_observed_values"],
             future_target=batch["future_target"],
             loss=self.loss,
-        ).mean()
+        )
 
         #pdb.set_trace()
+        #if self.logger and isinstance(self.logger.experiment, torch.utils.tensorboard.writer.SummaryWriter):
+        #    self.logger.experiment.add_histogram("Train/Loss", train_loss, global_step=self.global_step)
+        
+        train_loss = train_loss.mean()
         
         self.log(
             "train_loss",
