@@ -1005,7 +1005,8 @@ class DeepARTrainingNetwork(DeepARNetwork):
         if self.beta:
             tar_loss = self.tar_loss(rnn_outputs)
             weighted_loss = weighted_loss + tar_loss
-        return weighted_loss, loss
+            
+        return weighted_loss, loss, distr
 
 
 class DeepARPredictionNetwork(DeepARNetwork):

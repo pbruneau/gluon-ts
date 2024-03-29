@@ -11,6 +11,8 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+import pdb
+
 import itertools
 import logging
 import os
@@ -317,6 +319,13 @@ class Trainer:
                         with mode():
                             output = net(*batch.values())
 
+                        pdb.set_trace()
+                        # output is weighted loss, loss collected from earlier step
+                        # and distr added for logging
+                        # output[2].components holds: [AffineTransformedDistribution(...), AffineTransformedDistribution(...), AffineTransformedDistribution(...)]
+                        # each AffineTransformedDistribution holds (batch_size, nsteps) Tensors base_distribution.mu and base_distribution.sigma
+                        # then transformed with loc and scale
+                        
                         # network can returns several outputs, the first being
                         # always the loss when having multiple outputs, the
                         # forward returns a list in the case of hybrid and a

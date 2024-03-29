@@ -78,9 +78,13 @@ class DeepARLightningModule(pl.LightningModule):
             loss=self.loss,
         )
 
-        #pdb.set_trace()
+        pdb.set_trace()
         #if self.logger and isinstance(self.logger.experiment, torch.utils.tensorboard.writer.SummaryWriter):
         #    self.logger.experiment.add_histogram("Train/Loss", train_loss, global_step=self.global_step)
+
+        # distr.components holds: [AffineTransformed(), AffineTransformed(), AffineTransformed()]
+        # each AffineTransformed holds: base_dist.mean and base_dist.variance, then transformed with loc and scale
+        # each variable is a [batch_size, nsteps] Tensor
         
         train_loss = train_loss.mean()
         
