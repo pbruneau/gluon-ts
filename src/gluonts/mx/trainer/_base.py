@@ -40,7 +40,8 @@ from .learning_rate_scheduler import LearningRateReduction
 from .model_averaging import SelectNBestMean, save_epoch_info, ModelAveraging
 
 logger = logging.getLogger("gluonts").getChild("trainer")
-
+from mxboard import SummaryWriter
+sw = SummaryWriter(logdir='/home/localuser/lightning_logs/mxnet', flush_secs=5)
 
 MODEL_ARTIFACT_FILE_NAME = "model"
 STATE_ARTIFACT_FILE_NAME = "state"
@@ -319,7 +320,7 @@ class Trainer:
                         with mode():
                             output = net(*batch.values())
 
-                        pdb.set_trace()
+                        #pdb.set_trace()
                         # output is weighted loss, loss collected from earlier step
                         # and distr added for logging
                         # output[2].components holds: [AffineTransformedDistribution(...), AffineTransformedDistribution(...), AffineTransformedDistribution(...)]
@@ -337,6 +338,9 @@ class Trainer:
                             loss = output
 
                         batch_size = loss.shape[0]
+                        sw.add_histogram(tag='loss', 
+                                         values=loss.asnumpy(), 
+                                         global_step=epoch_no*self.num_batches_per_epoch+batch_no, bins=1000)
 
                     if not np.isfinite(ndarray.sum(loss).asscalar()):
                         logger.warning(
