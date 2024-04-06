@@ -37,12 +37,12 @@ def compute_and_log_jeffreys_divergences(distr, logger, global_step):
     for i in range(n_components):
         for j in range(i + 1, n_components):  # Ensure a != b and exploit symmetry
             mu_P = distr.components[i].base_dist.mean
-            sigma_P = torch.sqrt(distr.components[i].base_dist.variance)
+            variance_P = distr.components[i].base_dist.variance
             mu_Q = distr.components[j].base_dist.mean
-            sigma_Q = torch.sqrt(distr.components[j].base_dist.variance)
+            variance_Q = distr.components[j].base_dist.variance
 
             # Compute Jeffreys divergence for all positions
-            jeffreys = jeffreys_divergence(mu_P, sigma_P, mu_Q, sigma_Q)
+            jeffreys = jeffreys_divergence(mu_P, variance_P, mu_Q, variance_Q)
             
             # Flatten and store the computed divergences
             all_divergences.append(jeffreys.flatten())
@@ -52,7 +52,7 @@ def compute_and_log_jeffreys_divergences(distr, logger, global_step):
 
     # Log the distribution of Jeffreys divergences as a histogram
     if logger and hasattr(logger, 'experiment') and all_divergences.numel() > 0:
-        logger.experiment.add_histogram("Jeffreys Divergence", all_divergences, global_step=global_step)
+        logger.experiment.add_histogram("Jeffreys_Divergence", all_divergences, global_step=global_step, bins='auto')
 
 
 class DeepARLightningModule(pl.LightningModule):
@@ -114,11 +114,12 @@ class DeepARLightningModule(pl.LightningModule):
         #if self.logger and isinstance(self.logger.experiment, torch.utils.tensorboard.writer.SummaryWriter):
         #    self.logger.experiment.add_histogram("Train/Loss", train_loss, global_step=self.global_step)
         compute_and_log_jeffreys_divergences(distr, self.logger, self.global_step)
+        if self.logger and hasattr(self.logger, 'experiment'):
+            self.logger.experiment.add_histogram("Loss", train_loss, global_step=self.global_step)
         
         # distr.components holds: [AffineTransformed(), AffineTransformed(), AffineTransformed()]
         # each AffineTransformed holds: base_dist.mean and base_dist.variance, then transformed with loc and scale
         # each variable is a [batch_size, nsteps] Tensor
-        
         train_loss = train_loss.mean()
         
         self.log(

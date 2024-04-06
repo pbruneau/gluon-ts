@@ -52,6 +52,37 @@ MAX_VALUE = np.finfo(np.float32).max
 # make the IDE happy: mx.py does not explicitly import autograd
 mx.autograd = autograd
 
+def jeffreys_divergence(mu_P, variance_P, mu_Q, variance_Q):
+    part1 = ((variance_P + mx.nd.square(mu_P - mu_Q)) / (2 * variance_Q))
+    part2 = ((variance_Q + mx.nd.square(mu_Q - mu_P)) / (2 * variance_P))
+    jeffreys = part1 + part2 - 1
+    return jeffreys
+
+def compute_and_log_jeffreys_divergences(distr, sw, global_step):
+    n_components = len(distr.components)
+    all_divergences = []
+
+    # Compute Jeffreys divergence for each pair of components
+    for i in range(n_components):
+        for j in range(i + 1, n_components):  # Ensure a != b and exploit symmetry
+            mu_P = distr.components[i].base_distribution.mu
+            sigma_P = distr.components[i].base_distribution.sigma
+            mu_Q = distr.components[j].base_distribution.mu
+            sigma_Q = distr.components[j].base_distribution.sigma
+
+            # Compute Jeffreys divergence for all positions
+            jeffreys = jeffreys_divergence(mu_P, sigma_P ** 2, mu_Q, sigma_Q ** 2)
+            
+            # Flatten and store the computed divergences
+            all_divergences.append(jeffreys.reshape((-1,)))
+
+    # Concatenate all divergences into a single NDArray for histogram logging
+    all_divergences = mx.nd.concat(*all_divergences, dim=0)
+
+    # Log the distribution of Jeffreys divergences as a histogram
+    if sw and all_divergences.size > 0:
+        sw.add_histogram(tag="Jeffreys_Divergence", values=all_divergences.asnumpy(), global_step=global_step, bins='auto')
+
 
 def check_loss_finite(val: float) -> None:
     if not np.isfinite(val):
@@ -342,6 +373,8 @@ class Trainer:
                                          values=loss.asnumpy(), 
                                          global_step=epoch_no*self.num_batches_per_epoch+batch_no, bins=1000)
 
+                        compute_and_log_jeffreys_divergences(output[2], sw, epoch_no*self.num_batches_per_epoch+batch_no)
+                        
                     if not np.isfinite(ndarray.sum(loss).asscalar()):
                         logger.warning(
                             "Batch [%d] of Epoch[%d] gave NaN loss and it will"
