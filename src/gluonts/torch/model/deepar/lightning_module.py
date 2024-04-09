@@ -23,37 +23,6 @@ from gluonts.torch.model.lightning_util import has_validation_loop
 from .module import DeepARModel
 import pdb
 
-def jeffreys_divergence(mu_P, variance_P, mu_Q, variance_Q):
-    part1 = ((variance_P + (mu_P - mu_Q)**2) / (2 * variance_Q))
-    part2 = ((variance_Q + (mu_Q - mu_P)**2) / (2 * variance_P))
-    jeffreys = part1 + part2 - 1
-    return jeffreys
-
-def compute_and_log_jeffreys_divergences(distr, logger, global_step):
-    n_components = len(distr.components)
-    all_divergences = []
-
-    # Compute Jeffreys divergence for each pair of components
-    for i in range(n_components):
-        for j in range(i + 1, n_components):  # Ensure a != b and exploit symmetry
-            mu_P = distr.components[i].base_dist.mean
-            variance_P = distr.components[i].base_dist.variance
-            mu_Q = distr.components[j].base_dist.mean
-            variance_Q = distr.components[j].base_dist.variance
-
-            # Compute Jeffreys divergence for all positions
-            jeffreys = jeffreys_divergence(mu_P, variance_P, mu_Q, variance_Q)
-            
-            # Flatten and store the computed divergences
-            all_divergences.append(jeffreys.flatten())
-
-    # Concatenate all divergences into a single tensor for histogram logging
-    all_divergences = torch.cat(all_divergences)
-
-    # Log the distribution of Jeffreys divergences as a histogram
-    if logger and hasattr(logger, 'experiment') and all_divergences.numel() > 0:
-        logger.experiment.add_histogram("Jeffreys_Divergence", all_divergences, global_step=global_step, bins='auto')
-
 
 class DeepARLightningModule(pl.LightningModule):
     """
@@ -95,6 +64,7 @@ class DeepARLightningModule(pl.LightningModule):
         self.patience = patience
         self.inputs = self.model.describe_inputs()
         self.example_input_array = self.inputs.zeros()
+        self.distr = None
 
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
@@ -110,12 +80,8 @@ class DeepARLightningModule(pl.LightningModule):
             loss=self.loss,
         )
 
-        #pdb.set_trace()
-        #if self.logger and isinstance(self.logger.experiment, torch.utils.tensorboard.writer.SummaryWriter):
-        #    self.logger.experiment.add_histogram("Train/Loss", train_loss, global_step=self.global_step)
-        compute_and_log_jeffreys_divergences(distr, self.logger, self.global_step)
-        if self.logger and hasattr(self.logger, 'experiment'):
-            self.logger.experiment.add_histogram("Loss", train_loss, global_step=self.global_step)
+        self.latest_distr = distr
+        self.latest_loss = train_loss
         
         # distr.components holds: [AffineTransformed(), AffineTransformed(), AffineTransformed()]
         # each AffineTransformed holds: base_dist.mean and base_dist.variance, then transformed with loc and scale

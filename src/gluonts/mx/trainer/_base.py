@@ -40,8 +40,6 @@ from .learning_rate_scheduler import LearningRateReduction
 from .model_averaging import SelectNBestMean, save_epoch_info, ModelAveraging
 
 logger = logging.getLogger("gluonts").getChild("trainer")
-from mxboard import SummaryWriter
-sw = SummaryWriter(logdir='/home/localuser/lightning_logs/mxnet', flush_secs=5)
 
 MODEL_ARTIFACT_FILE_NAME = "model"
 STATE_ARTIFACT_FILE_NAME = "state"
@@ -51,38 +49,6 @@ MAX_VALUE = np.finfo(np.float32).max
 
 # make the IDE happy: mx.py does not explicitly import autograd
 mx.autograd = autograd
-
-def jeffreys_divergence(mu_P, variance_P, mu_Q, variance_Q):
-    part1 = ((variance_P + mx.nd.square(mu_P - mu_Q)) / (2 * variance_Q))
-    part2 = ((variance_Q + mx.nd.square(mu_Q - mu_P)) / (2 * variance_P))
-    jeffreys = part1 + part2 - 1
-    return jeffreys
-
-def compute_and_log_jeffreys_divergences(distr, sw, global_step):
-    n_components = len(distr.components)
-    all_divergences = []
-
-    # Compute Jeffreys divergence for each pair of components
-    for i in range(n_components):
-        for j in range(i + 1, n_components):  # Ensure a != b and exploit symmetry
-            mu_P = distr.components[i].base_distribution.mu
-            sigma_P = distr.components[i].base_distribution.sigma
-            mu_Q = distr.components[j].base_distribution.mu
-            sigma_Q = distr.components[j].base_distribution.sigma
-
-            # Compute Jeffreys divergence for all positions
-            jeffreys = jeffreys_divergence(mu_P, sigma_P ** 2, mu_Q, sigma_Q ** 2)
-            
-            # Flatten and store the computed divergences
-            all_divergences.append(jeffreys.reshape((-1,)))
-
-    # Concatenate all divergences into a single NDArray for histogram logging
-    all_divergences = mx.nd.concat(*all_divergences, dim=0)
-
-    # Log the distribution of Jeffreys divergences as a histogram
-    if sw and all_divergences.size > 0:
-        sw.add_histogram(tag="Jeffreys_Divergence", values=all_divergences.asnumpy(), global_step=global_step, bins='auto')
-
 
 def check_loss_finite(val: float) -> None:
     if not np.isfinite(val):
@@ -185,6 +151,7 @@ class Trainer:
         self.ctx = ctx if ctx is not None else get_mxnet_context()
         self.halt = False
         self.dir = dir
+        self.distr = None
 
         # Make sure callbacks is list -- they are assigned to `self.callbacks`
         # below
@@ -350,7 +317,11 @@ class Trainer:
                         )
                         with mode():
                             output = net(*batch.values())
-
+                            if mode == autograd.train_mode and len(output) > 2:
+                                # store at the net level so that on_train_batch_end can access information
+                                net.latest_distr = output[2]
+                                net.latest_loss = output[0] # batch_size values
+                            
                         #pdb.set_trace()
                         # output is weighted loss, loss collected from earlier step
                         # and distr added for logging
@@ -369,11 +340,6 @@ class Trainer:
                             loss = output
 
                         batch_size = loss.shape[0]
-                        sw.add_histogram(tag='loss', 
-                                         values=loss.asnumpy(), 
-                                         global_step=epoch_no*self.num_batches_per_epoch+batch_no, bins=1000)
-
-                        compute_and_log_jeffreys_divergences(output[2], sw, epoch_no*self.num_batches_per_epoch+batch_no)
                         
                     if not np.isfinite(ndarray.sum(loss).asscalar()):
                         logger.warning(
