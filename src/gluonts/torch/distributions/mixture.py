@@ -46,20 +46,12 @@ class MixtureArgs(nn.Module):
         return [mixture_probs] + component_args
 
 class MixtureDistributionOutput(DistributionOutput):
-<<<<<<< HEAD
     distr_cls: type = MixtureDistribution
     
-    @validated()
-    def __init__(self, distr_outputs: List[DistributionOutput]) -> None:
-        super().__init__(self)
-        self.distr_outputs = distr_outputs
-    
-=======
     def __init__(self, distr_outputs: List[DistributionOutput]) -> None:
         super().__init__()
         self.distr_outputs = distr_outputs
 
->>>>>>> 1441c729 (updated new torch/mixture implementation)
     def get_args_proj(self, in_features: int) -> nn.Module:
         return MixtureArgs(in_features, self.distr_outputs)
 
