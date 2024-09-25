@@ -11,8 +11,6 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-import pdb
-
 import itertools
 import logging
 import os
@@ -41,6 +39,7 @@ from .model_averaging import SelectNBestMean, save_epoch_info, ModelAveraging
 
 logger = logging.getLogger("gluonts").getChild("trainer")
 
+
 MODEL_ARTIFACT_FILE_NAME = "model"
 STATE_ARTIFACT_FILE_NAME = "state"
 
@@ -49,6 +48,7 @@ MAX_VALUE = np.finfo(np.float32).max
 
 # make the IDE happy: mx.py does not explicitly import autograd
 mx.autograd = autograd
+
 
 def check_loss_finite(val: float) -> None:
     if not np.isfinite(val):
@@ -151,7 +151,6 @@ class Trainer:
         self.ctx = ctx if ctx is not None else get_mxnet_context()
         self.halt = False
         self.dir = dir
-        self.distr = None
 
         # Make sure callbacks is list -- they are assigned to `self.callbacks`
         # below
@@ -317,18 +316,7 @@ class Trainer:
                         )
                         with mode():
                             output = net(*batch.values())
-                            if mode == autograd.train_mode and len(output) > 2:
-                                # store at the net level so that on_train_batch_end can access information
-                                net.latest_distr = output[2]
-                                net.latest_loss = output[0] # batch_size values
-                            
-                        #pdb.set_trace()
-                        # output is weighted loss, loss collected from earlier step
-                        # and distr added for logging
-                        # output[2].components holds: [AffineTransformedDistribution(...), AffineTransformedDistribution(...), AffineTransformedDistribution(...)]
-                        # each AffineTransformedDistribution holds (batch_size, nsteps) Tensors base_distribution.mu and base_distribution.sigma
-                        # then transformed with loc and scale
-                        
+
                         # network can returns several outputs, the first being
                         # always the loss when having multiple outputs, the
                         # forward returns a list in the case of hybrid and a
@@ -340,7 +328,7 @@ class Trainer:
                             loss = output
 
                         batch_size = loss.shape[0]
-                        
+
                     if not np.isfinite(ndarray.sum(loss).asscalar()):
                         logger.warning(
                             "Batch [%d] of Epoch[%d] gave NaN loss and it will"

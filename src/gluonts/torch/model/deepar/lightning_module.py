@@ -21,7 +21,6 @@ from gluonts.torch.modules.loss import DistributionLoss, NegativeLogLikelihood
 from gluonts.torch.model.lightning_util import has_validation_loop
 
 from .module import DeepARModel
-import pdb
 
 
 class DeepARLightningModule(pl.LightningModule):
@@ -64,7 +63,6 @@ class DeepARLightningModule(pl.LightningModule):
         self.patience = patience
         self.inputs = self.model.describe_inputs()
         self.example_input_array = self.inputs.zeros()
-        self.distr = None
 
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
@@ -73,21 +71,13 @@ class DeepARLightningModule(pl.LightningModule):
         """
         Execute training step.
         """
-        train_loss, distr = self.model.loss(
+        train_loss = self.model.loss(
             **select(self.inputs, batch),
             future_observed_values=batch["future_observed_values"],
             future_target=batch["future_target"],
             loss=self.loss,
-        )
+        ).mean()
 
-        self.latest_distr = distr
-        self.latest_loss = train_loss
-        
-        # distr.components holds: [AffineTransformed(), AffineTransformed(), AffineTransformed()]
-        # each AffineTransformed holds: base_dist.mean and base_dist.variance, then transformed with loc and scale
-        # each variable is a [batch_size, nsteps] Tensor
-        train_loss = train_loss.mean()
-        
         self.log(
             "train_loss",
             train_loss,

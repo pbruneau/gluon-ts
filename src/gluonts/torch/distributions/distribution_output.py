@@ -136,8 +136,12 @@ class DistributionOutput(Output):
             Optional tensor, of the same shape as the
             batch_shape+event_shape of the resulting distribution.
         """
-        
-        #pdb.set_trace()
+        #print("===distr_args===")
+        #print(distr_args)
+        #print("===loc===")
+        #print(loc)
+        #print("===scale===")
+        #print(scale)
         
         distr = self._base_distribution(distr_args)
         if loc is None and scale is None:

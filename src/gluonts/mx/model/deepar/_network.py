@@ -154,7 +154,6 @@ class DeepARNetwork(mx.gluon.HybridBlock):
             else:
                 self.unroll_encoder = self.unroll_encoder_default
                 self.include_zeros_in_denominator = False
-                
 
     @staticmethod
     def get_lagged_subsequences(
@@ -957,6 +956,8 @@ class DeepARTrainingNetwork(DeepARNetwork):
             future_target,
             dim=1,
         )
+        # PBR
+        #pdb.set_trace()
         
         # (batch_size, seq_len)
         loss = distr.loss(target)
@@ -988,10 +989,6 @@ class DeepARTrainingNetwork(DeepARNetwork):
             include_zeros_in_denominator=self.include_zeros_in_denominator,
         )
 
-        # log losses at this level
-        # PBR
-        #pdb.set_trace()
-        
         # need to mask possible nans and -inf
         loss = F.where(condition=loss_weights, x=loss, y=F.zeros_like(loss))
 
@@ -1005,8 +1002,7 @@ class DeepARTrainingNetwork(DeepARNetwork):
         if self.beta:
             tar_loss = self.tar_loss(rnn_outputs)
             weighted_loss = weighted_loss + tar_loss
-            
-        return weighted_loss, loss, distr
+        return weighted_loss, loss
 
 
 class DeepARPredictionNetwork(DeepARNetwork):

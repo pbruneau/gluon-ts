@@ -46,8 +46,6 @@ class MixtureArgs(nn.Module):
         return [mixture_probs] + component_args
 
 class MixtureDistributionOutput(DistributionOutput):
-    distr_cls: type = MixtureDistribution
-    
     def __init__(self, distr_outputs: List[DistributionOutput]) -> None:
         super().__init__()
         self.distr_outputs = distr_outputs
