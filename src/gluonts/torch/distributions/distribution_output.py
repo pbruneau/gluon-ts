@@ -25,6 +25,11 @@ from torch.distributions import (
     Normal,
     Poisson,
     Laplace,
+    # PBR
+    MixtureSameFamily,
+    Categorical,
+    TransformedDistribution,
+    AffineTransform,
 )
 
 from gluonts.core.component import validated
@@ -197,6 +202,40 @@ class NormalOutput(DistributionOutput):
     def event_shape(self) -> Tuple:
         return ()
 
+# PBR
+# Imported from https://github.com/zalandoresearch/pytorch-ts/blob/master/pts/modules/distribution_output.py
+class NormalMixtureOutput(DistributionOutput):
+    @validated()
+    def __init__(self, components: int = 1) -> None:
+        self.components = components
+        self.args_dim = {
+            "mix_logits": components,
+            "loc": components,
+            "scale": components,
+        }
+
+    @classmethod
+    def domain_map(cls, mix_logits, loc, scale):
+        scale = F.softplus(scale)
+        return mix_logits.squeeze(-1), loc.squeeze(-1), scale.squeeze(-1)
+
+    def distribution(
+        self, distr_args, scale: Optional[torch.Tensor] = None
+    ) -> Distribution:
+        mix_logits, loc, dist_scale = distr_args
+
+        distr = MixtureSameFamily(
+            Categorical(logits=mix_logits), Normal(loc, dist_scale)
+        )
+        if scale is None:
+            return distr
+        else:
+            return TransformedDistribution(distr, [AffineTransform(loc=0, scale=scale)])
+
+    @property
+    def event_shape(self) -> Tuple:
+        return ()
+        
 
 class LaplaceOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"loc": 1, "scale": 1}

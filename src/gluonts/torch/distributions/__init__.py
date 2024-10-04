@@ -21,6 +21,7 @@ from .distribution_output import (
     NormalOutput,
     PoissonOutput,
     LaplaceOutput,
+    NormalMixtureOutput,
 )
 from .generalized_pareto import GeneralizedPareto, GeneralizedParetoOutput
 from .implicit_quantile_network import (
@@ -59,6 +60,7 @@ __all__ = [
     "MixtureSameFamilyOutput",
     "MixtureDistribution",
     "MixtureDistributionOutput",
+    "NormalMixtureOutput",
     "NegativeBinomialOutput",
     "NormalOutput",
     "PiecewiseLinear",
